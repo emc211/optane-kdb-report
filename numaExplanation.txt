@@ -1,0 +1,44 @@
+Notice we are using specific options with numactl to start up kdb 
+The general recommendation when using numa is to set --interleave=all - from https://code.kx.com/q/kb/linux-production/ 
+` numactl --interleave=all q `
+
+However this isnt always the most optimal option for all cases. Lets use simple insert to test the time to allocate memory.
+In laymans terms numa is arranged into nodes. And cores can access memory in the same node faster. Taking this simple 2 node example. 
+We can see that if we use cores from a different node to memory we can see a minor performance hit.
+
+```
+|22:26:51|virtu@clx4:[~]> numactl --interleave=all q -q 
+q)\ts:1000000 a,:1
+111 12583152
+\\
+|22:27:05|virtu@clx4:[~]> numactl -N 0 -m 0  q -q 
+q)\ts:1000000 a,:1
+111 12583152
+\\
+|22:27:43|virtu@clx4:[~]> numactl -N 0 -m 1  q -q 
+q)\ts:1000000 a,:1   
+115 12583152
+\\
+|22:28:02|virtu@clx4:[~]> numactl -N 1 -m 0  q -q 
+q)\ts:1000000 a,:1
+114 12583152
+\\
+```
+
+Whenever we create the persistent memory mounts they too like dram itself have an associated node. And we will achieve the best performance by running the q process in the correct node for the associated mount provided to -m  
+Example of memory hit from
+
+```
+|22:28:11|virtu@clx4:[~]> numactl -N 0 -m 0  q -q -m /mnt/pmem0/
+q)\ts:1000000 .m.a,:1
+188 704
+\\
+|22:28:54|virtu@clx4:[~]> numactl -N 0 -m 0  q -q -m /mnt/pmem1/
+q)\ts:1000000 .m.a,:1
+200 704
+\\ 
+|22:29:22|virtu@clx4:[~]> numactl --interleave=all q -q -m /mnt/pmem1/
+q)\ts:1000000 .m.a,:1
+200 704
+\\
+```
