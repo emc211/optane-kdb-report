@@ -76,7 +76,12 @@ but found better performance in aligning the numa nodes with the persistent memo
 TODO link to fuller explanation
 
 
-## test case
+## Testing Framework
 - description of testing stack 
-
+![fig1.stack](figs/stack.png)
 - 
+
+## Findings/Results
+
+## Conclusions
+
