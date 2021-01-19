@@ -78,10 +78,12 @@ TODO link to fuller explanation
 
 ## Testing Framework
 - description of testing stack 
-![fig1.stack](figs/stack.png)
-- 
+![fig.1- Arcitecture of kdb stack](figs/stack.png)
+
 
 ## Findings/Results
+
+![fig.2 - Compare max quote time](figs/compMqtl.png)
 
 ## Conclusions
 
