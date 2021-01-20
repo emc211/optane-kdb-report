@@ -83,7 +83,19 @@ TODO link to fuller explanation
 
 ## Findings/Results
 
+This test was run with ticker plant in a 1s batch publish mode. And Querys hitting the rdbs every 2 seconds.
+
 ![fig.2 - Compare max quote time](figs/compMqtl.png)
+
+In this case although we see spikes in the maximium latency for the appDirect rdb.
+The latency remains very small through out. And is able to keep ingesting data from the tp without falling behind.
+
+The issue is whenever we decrease the batching and the query the rdb more regularly. Simulating a more latency sensitive system
+Here the tp was publish in 50ms batchs and querys running on rdbs every 1 second.
+
+![fig.3 - Compare max quote time](figs/compMqtl2.png)
+
+We can see now that the appDirect rdb falls very far behind compared to the DRAM rdb.
 
 ## Conclusions
 
