@@ -4,12 +4,24 @@
 ## Abstract
 - summary
 
+Table of Contents  
+
+[Intro](#head1)  
+[Hardware](#head2)  
+
+<a name="head1"/>
+
 ## Intro/Background
+
 - previous posts how this is diffetent
 - description of test case
 
+<a name="head2"/>
+
 ## Hardware
+
 -server details TODO evgueny provide details
+
 ```
 |18:05:28|user@clx4:[q]> lscpu
 Architecture:        x86_64
@@ -79,21 +91,21 @@ TODO link to fuller explanation
 ## Testing Framework - description of testing stack 
 The Framework designed to test how optane chips can be deployed is a common market data capture solution. Based on the standard [tick setup](https://github.com/KxSystems/kdb-tick)
 
-Feed
+### Feed
 Data arrives from a feed. Normally this would be a feedhandler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which durring its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades 
 
-Tp
+### Tp
 Standard kdb tp running in batch mode.
 
-AggEngine
+### AggEngine
 This process is the main departure for standard tick set up. This process subscribes to standard trade and quote tables and calculates running daily and minute level stacks for all symbols. These aggregated tables are then published to the rdb from which they could then be queried. 
 This process wwas added in order to have some kind of more complex event processs as well as standard rdb. This process will constantly have to read and write to memory. where generally only has to write as it appends data and only read for queries)
 
-Rdb
+### Rdb
 Standard rdb subsribes to tables from the tp. We also added option to prestress the memory before our half hour of testing again looking at the market fata on 2020.03.02 there were 650,000,000 quote msgs and 85,000,000 trades at 15:30 so we insert these volumes into the rdb at start up.
 This aims to ensure that the ram is already somewhat saturdated.
 
-Monitor
+### Monitor
 The Monit
 
 ![fig.1- Arcitecture of kdb stack](figs/stack.png)
