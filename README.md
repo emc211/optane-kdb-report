@@ -1,22 +1,25 @@
-# check for TODOs
-# Expanding Capacity of real time kdb tick stack with optane
+##### !!! check for TODOs !!!
+# Expanding Capacity of real time kdb market data stack with optane persistenent memory
 
 ## Abstract
 - summary
 
-Table of Contents  
+#### Table of Contents  
 
-[Intro](#head1)  
-[Hardware](#head2)  
+[Intro](#intro)  
+[Hardware](#hardware)  
+[Testing](#testing)  
+[Results](#results)  
+[Conclusion](#conclusion)  
 
-<a name="head1"/>
+<a name="intro"/>
 
 ## Intro/Background
 
 - previous posts how this is diffetent
 - description of test case
 
-<a name="head2"/>
+<a name="hardware"/>
 
 ## Hardware
 
@@ -88,6 +91,8 @@ but found better performance in aligning the numa nodes with the persistent memo
 TODO link to fuller explanation
 
 
+<a name="testing"/>
+
 ## Testing Framework - description of testing stack 
 The Framework designed to test how optane chips can be deployed is a common market data capture solution. Based on the standard [tick setup](https://github.com/KxSystems/kdb-tick)
 
@@ -106,11 +111,15 @@ Standard rdb subsribes to tables from the tp. We also added option to prestress 
 This aims to ensure that the ram is already somewhat saturdated.
 
 ### Monitor
-The Monit
+The Monitor process connects to the rdb and collect performance stats on a timer. Main measurements are for latency of quote table this will track if messages getting queued from the tp, quote stats table if this falls behind indicates issue in aggEngine and the query time which measures how long it takes to run some typical rdb queries .e.g aj
+On start up this process also kicks off the feed once having succsesfully connected to rdb to start testing run.
+Once endTime has been reached the stats collected are aggregated and written to csv.
 
 ![fig.1- Arcitecture of kdb stack](figs/stack.png)
 
 Wrapper scripts to start these stacks were then implemented
+
+<a name="results"/>
 
 ## Findings/Results
 
@@ -127,6 +136,8 @@ Here the tp was publish in 50ms batchs and querys running on rdbs every 1 second
 ![fig.3 - Compare max quote time](figs/compMqtl2.png)
 
 We can see now that the appDirect rdb falls very far behind compared to the DRAM rdb.
+
+<a name="conclusion"/>
 
 ## Conclusion
 
