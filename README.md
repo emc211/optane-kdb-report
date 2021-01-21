@@ -117,9 +117,12 @@ Once endTime has been reached the stats collected are aggregated and written to 
 
 ![fig.1- Arcitecture of kdb stack](figs/stack.png)
 
-Wrapper scripts to start these stacks were then implemented
+Wrapper scripts to start these stacks were then devised so multiple stacks could be started and compared.
 
 <a name="results"/>
+
+### Loading data into .m namespace
+
 
 ## Findings/Results
 
@@ -140,4 +143,13 @@ We can see now that the appDirect rdb falls very far behind compared to the DRAM
 <a name="conclusion"/>
 
 ## Conclusion
+- It is possible to run rdbs with data stored in optane instead of dram. Code required for such changes is outlined.
+- There is a trade off in performance for querying from persistent memory. can be seen to be 2-5x slower.
+- Possible that just trying to convert a working hdb to optane. This slow down in read speed will cause queries to take longer and could result in rdb delaying processing of of new messages for tp.
+- If a rdb is already seeing very high query volumes may not be advisable to move everything to optane mem.
+- More realistic use case is if you have columns that are seldom queried even only adhocly that subset of columns could be moved to .m namespace freeing up ram for more rdbs.
+
+### Steps for further investigation or post could involve 
+- enhancing query testing, have load balancer infront of rdbs and compare replacing 1 dram rdb with 3 optane rdbs. Ensure latency not an issue due to write contention and confirm that query impact not affect slow down mitagated by extra services available to run them. 
+
 
