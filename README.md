@@ -69,17 +69,36 @@ chmod 777 /mnt/pmem1
 ```
 
 ### Numa settings 
-The general recommendation when using numa is to set --interleave=all - from https://code.kx.com/q/kb/linux-production/                                                                                                                    
+The standard [recommendation](https://code.kx.com/q/kb/linux-production/) when using numa is to set --interleave=all                                                                                                                  
 ` numactl --interleave=all q ` 
 but found better performance in aligning the numa nodes with the persistent memorary namespaces
 `numactl -N 0 -m 0  q -q -m /mnt/pmem0/` and `numactl -N 1 -m 1  q -q -m /mnt/pmem1/`
 TODO link to fuller explanation
 
 
-## Testing Framework
-- description of testing stack 
+## Testing Framework - description of testing stack 
+The Framework designed to test how optane chips can be deployed is a common market data capture solution. Based on the standard [tick setup](https://github.com/KxSystems/kdb-tick)
+
+Feed
+Data arrives from a feed. Normally this would be a feedhandler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which durring its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades 
+
+Tp
+Standard kdb tp running in batch mode.
+
+AggEngine
+This process is the main departure for standard tick set up. This process subscribes to standard trade and quote tables and calculates running daily and minute level stacks for all symbols. These aggregated tables are then published to the rdb from which they could then be queried. 
+This process wwas added in order to have some kind of more complex event processs as well as standard rdb. This process will constantly have to read and write to memory. where generally only has to write as it appends data and only read for queries)
+
+Rdb
+Standard rdb subsribes to tables from the tp. We also added option to prestress the memory before our half hour of testing again looking at the market fata on 2020.03.02 there were 650,000,000 quote msgs and 85,000,000 trades at 15:30 so we insert these volumes into the rdb at start up.
+This aims to ensure that the ram is already somewhat saturdated.
+
+Monitor
+The Monit
+
 ![fig.1- Arcitecture of kdb stack](figs/stack.png)
 
+Wrapper scripts to start these stacks were then implemented
 
 ## Findings/Results
 
@@ -97,5 +116,5 @@ Here the tp was publish in 50ms batchs and querys running on rdbs every 1 second
 
 We can see now that the appDirect rdb falls very far behind compared to the DRAM rdb.
 
-## Conclusions
+## Conclusion
 
