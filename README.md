@@ -97,23 +97,23 @@ TODO link to fuller explanation
 The Framework designed to test how optane chips can be deployed is a common market data capture solution. Based on the standard [tick setup](https://github.com/KxSystems/kdb-tick)
 
 ### Feed
-Data arrives from a feed. Normally this would be a feedhandler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which durring its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades 
+Data arrives from a feed. Normally this would be a feedhandler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which durring its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades. Code can be viewed [here](../src/q/feed.q)
 
 ### Tp
-Standard kdb tp running in batch mode.
+Standard kdb tp running in batch mode. Code can be viewed [here](../src/q/tp)
 
 ### AggEngine
 This process is the main departure for standard tick set up. This process subscribes to standard trade and quote tables and calculates running daily and minute level stacks for all symbols. These aggregated tables are then published to the rdb from which they could then be queried. 
-This process wwas added in order to have some kind of more complex event processs as well as standard rdb. This process will constantly have to read and write to memory. where generally only has to write as it appends data and only read for queries)
+This process wwas added in order to have some kind of more complex event processs as well as standard rdb. This process will constantly have to read and write to memory. where generally only has to write as it appends data and only read for queries) Code can be viewed [here](../src/q/aggEngine)
 
 ### Rdb
 Standard rdb subsribes to tables from the tp. We also added option to prestress the memory before our half hour of testing again looking at the market fata on 2020.03.02 there were 650,000,000 quote msgs and 85,000,000 trades at 15:30 so we insert these volumes into the rdb at start up.
-This aims to ensure that the ram is already somewhat saturdated.
+This aims to ensure that the ram is already somewhat saturdated. [here](../src/q/tp)
 
 ### Monitor
 The Monitor process connects to the rdb and collect performance stats on a timer. Main measurements are for latency of quote table this will track if messages getting queued from the tp, quote stats table if this falls behind indicates issue in aggEngine and the query time which measures how long it takes to run some typical rdb queries .e.g aj
 On start up this process also kicks off the feed once having succsesfully connected to rdb to start testing run.
-Once endTime has been reached the stats collected are aggregated and written to csv.
+Once endTime has been reached the stats collected are aggregated and written to csv. [here](../src/q/monitorPerf.q)
 
 ![fig.1- Arcitecture of kdb stack](figs/stack.png)
 
