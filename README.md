@@ -19,12 +19,13 @@ by Nick McDaid and Eoin Cunning
 <a name="intro"/>
 
 ## Intro/Background
-This blog post looks at running the realtime elements of a kdb+ market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. We've documented some a few useful utilities for moving your data into Optane with minimal effort and documented the performance we saw.
+While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, with the ability to query weeks of data with performance levels approaching that of DRAM (<need to work this better), there as yet, has been no published research using Optane as a volatile memory source. This blog post looks at running the realtime elements of a kdb+ market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and it documents the observed performance.
 
 <a name="hardware"/>
 
 ## Hardware
 
+-TODO - SHOULD THIS BE AN APPENDIX-
 server details TODO Intel can provide more details here on optane and the server set up.
 
 ```
@@ -96,9 +97,9 @@ but found better performance in aligning the numa nodes with the persistent memo
 ## Testing Framework - description of testing stack
 The Framework designed to test how optane chips can be deployed is a common market data capture solution. Based on the standard [tick setup](https://github.com/KxSystems/kdb-tick)
 
-The traditional bottle neck of market data platforms has been the availability of DRAM on a server. This is the key determining factor when working out how many Real-time Database's (RDB's) you can host to service user queries for todays data. There are many ways to try and get around this restriction such as directing users to smaller aggregated services where possible, however when a user requires tick by tick precision, there is not other option other than going to the raw data in the RDB.
+The traditional bottle neck of market data platforms has been the amount of DRAM on a server, which in turn determines how many RDB's a server can host. There are a number of ways to try and get around this limitation, such as directing users to aggregated services such as second or minute bucketed data where possible, however when a user requires tick by tick precision, there is no other option other routing the query to the raw data in the RDB.
 
-To make sure we really stress tested Optane, we simulated the volume and velocity of market data process during the market crash on March 9th 2020. We prestressed the memory with 65million records, and then sent 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio. A tickerplant consumed this feed and on a 50ms timer, distrubed the messages to an aggregation engine, which generated second  / minute / daily aggregations and published these back to the tickerplant. The RDB consumed all incoming messages. Every 2 seconds our monitor process would query the RDB and measure:
+To make sure we really stress tested Optane, we simulated the volume and velocity of market data process during the market crash on March 9th 2020. We prestressed the RDB with 65 million records, and then sent 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio. A tickerplant consumed this feed and on a 50ms timer, distrubed the messages to an aggregation engine, which generated second  / minute / daily aggregations and published these back to the tickerplant. The RDB consumed all incoming messages. Every 2 seconds our monitor process would query the RDB and measure:
 - Max trade / quote latency (time between the tick being generated in the feed process and the tick being accessible via an RDB query)
 - Max latency on aggregated quote/ trade message (as above - but also including the time for the aggregation engine to do it's calculations and it's additional messaging hops)
 - Time for an asof join of all trades seen for a single symbol and their prevailing quote information
