@@ -147,6 +147,18 @@ Here the tp was publish in 50ms batchs and querys running on rdbs every 1 second
 
 We can see now that the appDirect rdb falls very far behind compared to the DRAM rdb.
 
+
+Other uses topics to explore
+- query performance - we have mainly explored the capabilities of the standard tick systems abilities to keep latency low and process data while using pmem instead of dram. And expanding the capabilities of an existing server. We can run 10 optane rdbs at same time. And have very low mem usage. However you need to design to ensure you dont try to pull all the mem into dram durring queries.
+ .i.e a:-9!-8!select from quote on all the rdbs will blow up system.
+Further exploration into the query performance of the optane rdbs should be looked at. could be 2-5x slower for raw pulling from dram compared to pmem but seeing how this would actually affect a api and if this slow down is completely offset by ability to run more rdbs.
+
+
+- using optane for large static tables that take up alot of room in mem but are queried so often take to long to have written to disk. .e.d flatfile table you load into hdbs or reference data tables saved in gateways
+- replay performance - we have seen write contention so be interesting to exploer how replay would work for pmem rdbs. This would probably stress test the write performance to the pmem mounts. May need to batch upds and and write to dram as intermediary
+
+
+
 <a name="conclusion"/>
 
 ## Conclusion
