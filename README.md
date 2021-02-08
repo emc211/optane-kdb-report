@@ -147,6 +147,9 @@ Here the tp was publish in 50ms batchs and querys running on rdbs every 1 second
 
 We can see now that the appDirect rdb falls very far behind compared to the DRAM rdb.
 
+imn pmem reads are much faster than writes but we seemed to run into issues with the reads more than writing the data.
+This is possibly because generally kdb will write small amounts of data throughout the the pmem.
+But queries can attempt to access all the data in pmem. .e.g max quote`time 
 
 Other uses topics to explore
 - query performance - we have mainly explored the capabilities of the standard tick systems abilities to keep latency low and process data while using pmem instead of dram. And expanding the capabilities of an existing server. We can run 10 optane rdbs at same time. And have very low mem usage. However you need to design to ensure you dont try to pull all the mem into dram durring queries.
