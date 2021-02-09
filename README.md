@@ -111,12 +111,12 @@ This process wwas added in order to have some kind of more complex event process
 
 ### Rdb
 Standard rdb subsribes to tables from the tp. We also added option to prestress the memory before our half hour of testing again looking at the market fata on 2020.03.02 there were 650,000,000 quote msgs and 85,000,000 trades at 15:30 so we insert these volumes into the rdb at start up.
-This aims to ensure that the ram is already somewhat saturdated. [here](../src/q/tp)
+This aims to ensure that the ram is already somewhat saturdated. Full code available[here](../src/q/tp)
 
 ### Monitor
 The Monitor process connects to the rdb and collect performance stats on a timer. Main measurements are for latency of quote table this will track if messages getting queued from the tp, quote stats table if this falls behind indicates issue in aggEngine and the query time which measures how long it takes to run some typical rdb queries .e.g aj
 On start up this process also kicks off the feed once having succsesfully connected to rdb to start testing run.
-Once endTime has been reached the stats collected are aggregated and written to csv. [here](../src/q/monitorPerf.q)
+Once endTime has been reached the stats collected are aggregated and written to csv. Again link for full code available [here](../src/q/monitorPerf.q)
 
 <a name="findings"/>
 
@@ -152,7 +152,7 @@ It's worth nothing for our aggregation engines, we kept all the caches and requi
 ### Queries take longer so make sure extra services are worth it
 Further exploration into the query performance of the optane rdbs should be looked at. could be 2-5x slower for raw pulling from dram compared to pmem but seeing how this would actually affect a api and if this slow down is completely offset by ability to run more rdbs.
 
-### READ versus wrtie
+### READ versus write
 The general consesus was that pMem reads are super fast and closer to DRAM that writes 
 but we seemed to run into issues with the reads more than writing the data.
 This is possibly because generally kdb will write small amounts of data throughout the the pmem.
@@ -163,7 +163,7 @@ But queries can attempt to access all the data in pmem. .e.g max quote\`time
 ## Conclusion
 - It is possible to run rdbs with data stored in optane instead of dram. Code required for such changes is outlined.
 - There is a trade off in performance for querying from persistent memory. can be seen to be 2-5x slower.
-- Possible that just trying to convert a working hdb to optane. This slow down in read speed will cause queries to take longer and could result in rdb delaying processing of of new messages for tp.
+- Possible that just trying to convert a working rdb to optane. This slow down in read speed will cause queries to take longer and could result in rdb delaying processing of of new messages for tp.
 - If a rdb is already seeing very high query volumes may not be advisable to move everything to optane mem.
 - More realistic use case is if you have columns that are seldom queried even only adhocly that subset of columns could be moved to .m namespace freeing up ram for more rdbs.
 
