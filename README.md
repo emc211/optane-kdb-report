@@ -9,8 +9,8 @@
 
 ### Table of Contents  
 
-[Background](#Background) 
-[appDirect](#appDirect)
+[Background](#Background)  
+[appDirect](#appDirect)  
 [Testing](#testing)  
 [Findings](#findings)  
 [Conclusion](#conclusion)  
@@ -20,7 +20,7 @@
 <a name="Background"/>
 
 ## Background
-This blog assumes reader already has some knowledge of optane and persistent memory and how kdb has been adapted to interact with it. More information on this [here]!(https://code.kx.com/q/kb/optane).
+This blog assumes reader already has some knowledge of optane and persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane).
 
 While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane), there as yet, has been no published research using Optane as a volatile memory source. 
 
@@ -30,9 +30,10 @@ This blog post looks at running the realtime elements of a kdb+ market data stac
 
 # TODO - better section title?
 ## Storing real time data in with app Direct
-The main point of this blog is a real world application of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 3.6 
-From kdb release notes
-```
+The main point of this blog is a real world application of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 4.0
+
+From kdb release notes:
+``
 2019.10.22
 NUC
 memory can be backed by a filesystem, allowing use of dax-enabled filesystems (e.g. AppDirect) as a non-persistent memory extension for kdb+.
