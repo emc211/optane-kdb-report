@@ -7,19 +7,79 @@
 - Compared the performance of optane versus regular dram in these scenrios for several combinations of the system varibles mentioned.
 - Found that there are scenarios where storing rdb data in optane is a viable option and in these case addition of optane to existing server should expand capicity where using traditional hardware would mean requiring to get additional servers.
 
-#### Table of Contents  
+### Table of Contents  
 
-[Intro](#intro)  
+[Background](#Background) 
+[appDirect](#appDirect)
 [Testing](#testing)  
 [Findings](#findings)  
 [Conclusion](#conclusion)  
 [About The Authors](#authors)  
 [Appendix](#appen)
 
-<a name="intro"/>
+<a name="Background"/>
 
-## Intro/Background
-While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, with the ability to query weeks of data with performance levels approaching that of DRAM (<need to work this better), there as yet, has been no published research using Optane as a volatile memory source. This blog post looks at running the realtime elements of a kdb+ market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and it documents the observed performance.
+## Background
+This blog assumes reader already has some knowledge of optane and persistent memory and how kdb has been adapted to interact with it. More information on this [here]!(https://code.kx.com/q/kb/optane).
+
+While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane), there as yet, has been no published research using Optane as a volatile memory source. 
+
+This blog post looks at running the realtime elements of a kdb+ market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and it documents the observed performance.
+
+<a name="appDirect"/>
+
+# TODO - better section title?
+## Storing real time data in with app Direct
+The main point of this blog is a real world application of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 3.6 
+From kdb release notes
+```
+2019.10.22
+NUC
+memory can be backed by a filesystem, allowing use of dax-enabled filesystems (e.g. AppDirect) as a non-persistent memory extension for kdb+.
+cmd line option -m path to use the filesystem path specified as a separate memory domain. This splits every thread's heap in to two:
+  domain 0: regular anonymous memory (active and used for all allocs by default)
+  domain 1: filesystem-backed memory
+ .m namespace is reserved for objects in domain 1, however names from other namespaces can reference them too, e.g. a:.m.a:1 2 3
+ \d .m changes current domain to 1, causing it to be used by all further allocs. \d .anyotherns sets it back to 0
+ .m.x:x ensures the entirety of .m.x is in the domain 1, performing a deep copy of x as needed (objects of types 100-103h,112h are not copied and remain in domain 0)
+ lambdas defined in .m set current domain to 1 during execution. This will nest since other lambdas don't change domains:
+  q)\d .myns
+  q)g:{til x}
+  q)\d .m
+  q)w:{system"w"};f:{.myns.g x}
+  q)\d .
+  q)x:.m.f 1000000;.m.w` / x allocated in domain 1
+ -120!x returns x's domain (currently 0 or 1), e.g 0 1~-120!'(1 2 3;.m.x:1 2 3)
+ \w returns memory info for the current domain only:
+  q)value each ("\\d .m";"\\w";"\\d .";"\\w")
+-w limit (M1/m2) is no longer thread-local, but domain-local; cmdline -w, \w set limit for domain 0
+mapped is a single global counter, same in every thread's \w
+```
+The important concept for storing tables in 
+```
+q)t:.m.t:til 10  //define variable in .m then another variable that will point to same space in memory
+q)t,:10          //append to t
+q)-120!t         //t is in filesystem-backed memory domain
+1
+```
+This means that with one simple change when defining our schema we can move tables or subset of columns of table to filesystem-backed memory without any other codes changes to the rest of the system. To do this we define following two functions.
+```
+.mUtil.moveColumnsToAppDirect:{[t;cs] // ex .mUtil.moveColumnsToAppDirect[`trade;`price`size]
+	/enusre cs is list
+	cs,:();
+	/pull out columns to move an assign in .m namespace
+	(` sv `.m,t) set ?[t;();0b;cs!cs];
+	/replace columns in table
+	t set get[t],'.m[t];
+	}
+
+.mUtil.moveTableToAppDirect:.mUtil.moveColumnsToAppDirect[;()]
+```
+The difference then between running a DRAM rdb and appDirect rdb is starting it with the [-m option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) just and  running
+```
+.mUtil.moveTableToAppDirect each tables[];
+```
+After we load the standard schema file.
 
 <a name="testing"/>
 
@@ -34,8 +94,7 @@ To make sure we really stress tested Optane, we simulated the volume and velocit
 - Time for an asof join of all trades seen for a single symbol and their prevailing quote information
 - Various memory stats such as Percent DRAM used and Percent Optane memory used
 
-The above was considered a "stack". We ran four stacks concurrently for our testing. Two fully hosted in DRAM and two with their RDBs hosted in Optane. It's worth nothing for our aggregation engines, we kept all the caches and required data in DRAM as Optane does have I/O restrictions and an engine which is constantly reading and writing small ticks would not be the optimal use case for the technology.
-
+The above was considered a "stack". We ran four stacks concurrently for our testing. Two fully hosted in DRAM and two with their RDBs hosted in Optane. 
 
 ![fig.1- Arcitecture of kdb stack](figs/stack.png)
 
@@ -62,6 +121,8 @@ Once endTime has been reached the stats collected are aggregated and written to 
 
 ## Findings
 
+```
+vvvvvvvvvvvvvvvv dont think any of this is still relavent vvvvvvvvvvvvvvvv
 This test was run with ticker plant in a 1s batch publish mode. And Querys hitting the rdbs every 2 seconds.
 
 ![fig.2 - Compare max quote time](figs/compMqtl.png)
@@ -76,18 +137,25 @@ Here the tp was publish in 50ms batchs and querys running on rdbs every 1 second
 
 We can see now that the appDirect rdb falls very far behind compared to the DRAM rdb.
 
-imn pmem reads are much faster than writes but we seemed to run into issues with the reads more than writing the data.
-This is possibly because generally kdb will write small amounts of data throughout the the pmem.
-But queries can attempt to access all the data in pmem. .e.g max quote`time 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
+```
 
-Other uses topics to explore
-- query performance - we have mainly explored the capabilities of the standard tick systems abilities to keep latency low and process data while using pmem instead of dram. And expanding the capabilities of an existing server. We can run 10 optane rdbs at same time. And have very low mem usage. However you need to design to ensure you dont try to pull all the mem into dram durring queries.
+### On a server that maxed out with 2 DRAM rdbs we could run 10 PMEM rdbs!
+we have mainly explored the capabilities of the standard tick systems abilities to keep latency low and process data while using pmem instead of dram. And expanding the capabilities of an existing server. We can run 10 optane rdbs at same time. And have very low mem usage. However you need to design to ensure you dont try to pull all the mem into dram durring queries.
  .i.e a:-9!-8!select from quote on all the rdbs will blow up system.
+This is the same way you dont just run 20 slaves on your rdb as the memorary would blow up as it intermediatary data to DRAM.
+
+### (AGG ENGINE IN PMEM = BAD)
+It's worth nothing for our aggregation engines, we kept all the caches and required data in DRAM as Optane does have I/O restrictions and an engine which is constantly reading and writing small ticks would not be the optimal use case for the technology.
+
+### Queries take longer so make sure extra services are worth it
 Further exploration into the query performance of the optane rdbs should be looked at. could be 2-5x slower for raw pulling from dram compared to pmem but seeing how this would actually affect a api and if this slow down is completely offset by ability to run more rdbs.
 
-
-- using optane for large static tables that take up alot of room in mem but are queried so often take to long to have written to disk. .e.d flatfile table you load into hdbs or reference data tables saved in gateways
-- replay performance - we have seen write contention so be interesting to exploer how replay would work for pmem rdbs. This would probably stress test the write performance to the pmem mounts. May need to batch upds and and write to dram as intermediary
+### READ versus wrtie
+The general consesus was that pMem reads are super fast and closer to DRAM that writes 
+but we seemed to run into issues with the reads more than writing the data.
+This is possibly because generally kdb will write small amounts of data throughout the the pmem.
+But queries can attempt to access all the data in pmem. .e.g max quote`time 
 
 <a name="conclusion"/>
 
@@ -102,6 +170,8 @@ While it isn't primarily marketed as a DRAM replacement technology, we found it 
 
 ### Steps for further investigation or post could involve
 - enhancing query testing, have load balancer infront of rdbs and compare replacing 1 dram rdb with 3 optane rdbs. Ensure latency not an issue due to write contention and confirm that query impact not affect slow down mitagated by extra services available to run them.
+- using optane for large static tables that take up alot of room in mem but are queried so often take to long to have written to disk. .e.d flatfile table you load into hdbs or reference data tables saved in gateways
+- replay performance - we have seen write contention so be interesting to exploer how replay would work for pmem rdbs. This would probably stress test the write performance to the pmem mounts. May need to batch upds and and write to dram as intermediary
 
 <a name="authors"/>
 
@@ -116,9 +186,9 @@ While it isn't primarily marketed as a DRAM replacement technology, we found it 
 
 ### Hardware
 
--TODO - SHOULD THIS BE AN APPENDIX-
-server details TODO Intel can provide more details here on optane and the server set up.
+# TODO - Intel to provide more details here on optane and the server set up.
 
+#### Server details 
 ```
 |18:05:28|user@clx4:[q]> lscpu
 Architecture:        x86_64
@@ -178,5 +248,3 @@ The standard [recommendation](https://code.kx.com/q/kb/linux-production/) when u
 ` numactl --interleave=all q `
 but found better performance in aligning the numa nodes with the persistent memorary namespaces
 `numactl -N 0 -m 0  q -q -m /mnt/pmem0/` and `numactl -N 1 -m 1  q -q -m /mnt/pmem1/`
-
-
