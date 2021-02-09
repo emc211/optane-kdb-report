@@ -33,7 +33,7 @@ This blog post looks at running the realtime elements of a kdb+ market data stac
 The main point of this blog is a real world application of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 4.0
 
 From kdb release notes:
-``
+```
 2019.10.22
 NUC
 memory can be backed by a filesystem, allowing use of dax-enabled filesystems (e.g. AppDirect) as a non-persistent memory extension for kdb+.
@@ -56,7 +56,7 @@ cmd line option -m path to use the filesystem path specified as a separate memor
 -w limit (M1/m2) is no longer thread-local, but domain-local; cmdline -w, \w set limit for domain 0
 mapped is a single global counter, same in every thread's \w
 ```
-The important concept for storing tables in 
+An important note for our concept for storing tables is:
 ```
 q)t:.m.t:til 10  //define variable in .m then another variable that will point to same space in memory
 q)t,:10          //append to t
@@ -76,7 +76,7 @@ This means that with one simple change when defining our schema we can move tabl
 
 .mUtil.moveTableToAppDirect:.mUtil.moveColumnsToAppDirect[;()]
 ```
-The difference then between running a DRAM rdb and appDirect rdb is starting it with the [-m option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) just and  running
+The difference then between running a DRAM rdb and appDirect rdb is starting it with the [-m option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) just and running
 ```
 .mUtil.moveTableToAppDirect each tables[];
 ```
@@ -156,7 +156,7 @@ Further exploration into the query performance of the optane rdbs should be look
 The general consesus was that pMem reads are super fast and closer to DRAM that writes 
 but we seemed to run into issues with the reads more than writing the data.
 This is possibly because generally kdb will write small amounts of data throughout the the pmem.
-But queries can attempt to access all the data in pmem. .e.g max quote`time 
+But queries can attempt to access all the data in pmem. .e.g max quote\`time 
 
 <a name="conclusion"/>
 
