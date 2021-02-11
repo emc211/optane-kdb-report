@@ -94,7 +94,6 @@ This is important as we have the ability to spin up many more instances of rdb, 
 However if we define code within the .m namespace then any intermediateis there created there will use the -m domain. 
 
 So if we had a very memory intensive piece of code to run something like end of day we could define the code in .m namespace and run all of it without using any dram.
-Proof:
 ```
 q)n:1000000;.m.tab:tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
 q)f:{`s`t xasc tab}
