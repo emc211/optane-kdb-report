@@ -1,16 +1,16 @@
-# Expanding Capacity of typical kdb market data system with optane persistenent memory
+# Using optane memory to expand the capacity of a typical kdb market data system
 [by Nick McDaid and Eoin Cunning](#authors)
 
 ## Abstract
-- Wrote a test suite to examine the latency of a typical real time kdb solution. To compare and contrast the effects of different volumes of data, throughput rates etc.
-- Wrote tools to easily configure the splitting of real time data between dram and optane storage.
-- Compared the performance of optane versus regular dram in these scenrios for several combinations of the system varibles mentioned.
-- Found that there are scenarios where storing rdb data in optane is a viable option and in these case addition of optane to existing server should expand capicity where using traditional hardware would mean requiring to get additional servers.
+- Wrote a test suite to examine the latency of a typical real time kdb solution. To compare and contrast the effects of different volumes of data and throughput rates among other variables.
+- Wrote tools to easily configure the splitting of real time data between dram and filesystem backed memory.
+- Compared the performance versus regular dram in these scenrios for several combinations of the system varibles mentioned.
+- Found that there are scenarios where storing rdb data in optane is a viable option and in these case the addition of optane to an existing server should expand capicity where using traditional hardware would mean requiring to get additional servers.
 
 ### Table of Contents  
 
 [Background](#Background)  
-[appDirect](#appDirect)  
+[Using filesystem backed memory](#FilesystemBackedMemory)  
 [Testing](#testing)  
 [Findings](#findings)  
 [Conclusion](#conclusion)  
@@ -22,15 +22,17 @@
 ## Background
 This blog assumes reader already has some knowledge of optane and persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane).
 
-While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane), there as yet, has been no published research using Optane as a volatile memory source. 
+While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane). However there as yet, has been no published research using Optane as a volatile memory source. 
 
 This blog post looks at running the realtime elements of a kdb+ market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and it documents the observed performance.
 
-<a name="appDirect"/>
+<a name="FilesystemBackedMemory"/>
 
-# TODO - better section title?
-## Storing real time data in with app Direct
-The main point of this blog is a real world application of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 4.0
+## Filesystem backed memory
+TODO could ad more explanation to app direct mode
+https://thessdguy.com/intels-optane-two-confusing-modes-part-3-app-direct-mode/
+
+Filesystem backed memory is a available in kdb by use of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 4.0
 
 From kdb release notes:
 ```
@@ -56,16 +58,16 @@ cmd line option -m path to use the filesystem path specified as a separate memor
 -w limit (M1/m2) is no longer thread-local, but domain-local; cmdline -w, \w set limit for domain 0
 mapped is a single global counter, same in every thread's \w
 ```
-An important note for our concept for storing tables is:
+An important note for the concept for storing tables is:
 ```
 q)t:.m.t:til 10  //define variable in .m then another variable that will point to same space in memory
 q)t,:10          //append to t
 q)-120!t         //t is in filesystem-backed memory domain
 1
 ```
-This means that with one simple change when defining our schema we can move tables or subset of columns of table to filesystem-backed memory without any other codes changes to the rest of the system. To do this we define following two functions.
+This means that with one simple change when defining schemas tables (or subset of columns of table) can be moved to filesystem backed memory without any other codes changes to the rest of the system. This was accomplished using the following two functions.
 ```
-.mUtil.moveColumnsToAppDirect:{[t;cs] // ex .mUtil.moveColumnsToAppDirect[`trade;`price`size]
+.mUtil.colsToDotM:{[t;cs] // ex .mUtil.colsToDotM[`trade;`price`size]
 	/enusre cs is list
 	cs,:();
 	/pull out columns to move an assign in .m namespace
@@ -74,49 +76,30 @@ This means that with one simple change when defining our schema we can move tabl
 	t set get[t],'.m[t];
 	}
 
-.mUtil.moveTableToAppDirect:.mUtil.moveColumnsToAppDirect[;()]
+.mUtil.tblToDotM:.mUtil.colsToDotM[;()]
 ```
-The difference then between running a DRAM rdb and appDirect rdb is starting it with the [-m option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) just and running
+The difference then between running a DRAM rdb and appDirect rdb is starting it with the [-m option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and running
 ```
-.mUtil.moveTableToAppDirect each tables[];
+.mUtil.tblToDotM each tables[];
 ```
-After we load the standard schema file.
+After loading the standard schema file.
 
 <a name="testing"/>
 
-## Testing Framework - description of testing stack
+## Testing Framework
 The Framework designed to test how optane chips can be deployed is a common market data capture solution. Based on the standard [tick setup](https://github.com/KxSystems/kdb-tick)
 
 The traditional bottle neck of market data platforms has been the amount of DRAM on a server, which in turn determines how many RDB's a server can host. There are a number of ways to try and get around this limitation, such as directing users to aggregated services such as second or minute bucketed data where possible, however when a user requires tick by tick precision, there is no other option other routing the query to the raw data in the RDB.
 
-To make sure we really stress tested Optane, we simulated the volume and velocity of market data process during the market crash on March 9th 2020. We prestressed the RDB with 65 million records, and then sent 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio. A tickerplant consumed this feed and on a 50ms timer, distrubed the messages to an aggregation engine, which generated second  / minute / daily aggregations and published these back to the tickerplant. The RDB consumed all incoming messages. Every 2 seconds our monitor process would query the RDB and measure:
+To ensure a sufficent stress test, the system simulates the volume and velocity of market data processed during the market crash on March 9th 2020. We prestressed the RDB with 65 million records, and then sent 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio. A tickerplant consumed this feed and on a 50ms timer, distrubed the messages to an aggregation engine, which generated minute / daily aggregations and published these back to the tickerplant. The RDB consumed all incoming messages. Every 2 seconds our monitor process would query the RDB and measure:
 - Max trade / quote latency (time between the tick being generated in the feed process and the tick being accessible via an RDB query)
-- Max latency on aggregated quote/ trade message (as above - but also including the time for the aggregation engine to do it's calculations and it's additional messaging hops)
+- Max latency on aggregated trade / quote message (as above - but also including the time for the aggregation engine to do it's calculations and it's additional messaging hops)
 - Time for an asof join of all trades seen for a single symbol and their prevailing quote information
-- Various memory stats such as Percent DRAM used and Percent Optane memory used
+- Various memory stats such as Percentage DRAM used and Percentage Optane memory used
 
 The above was considered a "stack". We ran four stacks concurrently for our testing. Two fully hosted in DRAM and two with their RDBs hosted in Optane. 
 
-![fig.1- Arcitecture of kdb stack](figs/stack.png)
-
-### Feed
-Data arrives from a feed. Normally this would be a feedhandler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which durring its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades. Code can be viewed [here](../src/q/feed.q)
-
-### Tp
-Standard kdb tp running in batch mode. Code can be viewed [here](../src/q/tp)
-
-### AggEngine
-This process is the main departure for standard tick set up. This process subscribes to standard trade and quote tables and calculates running daily and minute level stacks for all symbols. These aggregated tables are then published to the rdb from which they could then be queried.
-This process wwas added in order to have some kind of more complex event processs as well as standard rdb. This process will constantly have to read and write to memory. where generally only has to write as it appends data and only read for queries) Code can be viewed [here](../src/q/aggEngine)
-
-### Rdb
-Standard rdb subsribes to tables from the tp. We also added option to prestress the memory before our half hour of testing again looking at the market fata on 2020.03.02 there were 650,000,000 quote msgs and 85,000,000 trades at 15:30 so we insert these volumes into the rdb at start up.
-This aims to ensure that the ram is already somewhat saturdated. Full code available[here](../src/q/tp)
-
-### Monitor
-The Monitor process connects to the rdb and collect performance stats on a timer. Main measurements are for latency of quote table this will track if messages getting queued from the tp, quote stats table if this falls behind indicates issue in aggEngine and the query time which measures how long it takes to run some typical rdb queries .e.g aj
-On start up this process also kicks off the feed once having succsesfully connected to rdb to start testing run.
-Once endTime has been reached the stats collected are aggregated and written to csv. Again link for full code available [here](../src/q/monitorPerf.q)
+Please find a more detailed description of the [arcitecture](#arcitecture) in the appendix.
 
 <a name="findings"/>
 
@@ -126,7 +109,7 @@ Once endTime has been reached the stats collected are aggregated and written to 
 vvvvvvvvvvvvvvvv dont think any of this is still relavent vvvvvvvvvvvvvvvv
 This test was run with ticker plant in a 1s batch publish mode. And Querys hitting the rdbs every 2 seconds.
 
-![fig.2 - Compare max quote time](figs/compMqtl.png)
+![fig - Compare max quote time](figs/compMqtl.png)
 
 In this case although we see spikes in the maximium latency for the appDirect rdb.
 The latency remains very small through out. And is able to keep ingesting data from the tp without falling behind.
@@ -134,7 +117,7 @@ The latency remains very small through out. And is able to keep ingesting data f
 The issue is whenever we decrease the batching and the query the rdb more regularly. Simulating a more latency sensitive system
 Here the tp was publish in 50ms batchs and querys running on rdbs every 1 second.
 
-![fig.3 - Compare max quote time](figs/compMqtl2.png)
+![fig - Compare max quote time](figs/compMqtl2.png)
 
 We can see now that the appDirect rdb falls very far behind compared to the DRAM rdb.
 
@@ -249,3 +232,28 @@ The standard [recommendation](https://code.kx.com/q/kb/linux-production/) when u
 ` numactl --interleave=all q `
 but found better performance in aligning the numa nodes with the persistent memorary namespaces
 `numactl -N 0 -m 0  q -q -m /mnt/pmem0/` and `numactl -N 1 -m 1  q -q -m /mnt/pmem1/`
+
+<a name="arcitecture"/>
+
+### Testing Framework Arcitecture
+
+![fig - Arcitecture of kdb stack](figs/stack.png)
+
+#### Feed
+Data arrives from a feed. Normally this would be a feedhandler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which durring its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades. Code can be viewed [here](../src/q/feed.q)
+
+#### Tp
+Standard kdb tp running in batch mode. Code can be viewed [here](../src/q/tp)
+
+#### AggEngine
+This process is the main departure for standard tick set up. This process subscribes to standard trade and quote tables and calculates running daily and minute level stacks for all symbols. These aggregated tables are then published to the rdb from which they could then be queried.
+This process wwas added in order to have some kind of more complex event processs as well as standard rdb. This process will constantly have to read and write to memory. where generally only has to write as it appends data and only read for queries) Code can be viewed [here](../src/q/aggEngine)
+
+#### Rdb
+Standard rdb subscribes to tables from the tp. We also added option to prestress the memory before our half hour of testing again looking at the market fata on 2020.03.02 there were 650,000,000 quote msgs and 85,000,000 trades at 15:30 so we insert these volumes into the rdb at start up.
+This aims to ensure that the ram is already somewhat saturdated. Full code available[here](../src/q/tp)
+
+#### Monitor
+The Monitor process connects to the rdb and collect performance stats on a timer. Main measurements are for latency of quote table this will track if messages getting queued from the tp, quote stats table if this falls behind indicates issue in aggEngine and the query time which measures how long it takes to run some typical rdb queries .e.g aj
+On start up this process also kicks off the feed once having succsesfully connected to rdb to start testing run.
+Once endTime has been reached the stats collected are aggregated and written to csv. Again link for full code available [here](../src/q/monitorPerf.q)
