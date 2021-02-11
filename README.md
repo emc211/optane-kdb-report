@@ -46,7 +46,7 @@ cmd line option -m path to use the filesystem path specified as a separate memor
  \d .m changes current domain to 1, causing it to be used by all further allocs. \d .anyotherns sets it back to 0
  .m.x:x ensures the entirety of .m.x is in the domain 1, performing a deep copy of x as needed (objects of types 100-103h,112h are not copied and remain in domain 0)
  lambdas defined in .m set current domain to 1 during execution. This will nest since other lambdas don't change domains:
-  q)\d .myns
+c  q)\d .myns
   q)g:{til x}
   q)\d .m
   q)w:{system"w"};f:{.myns.g x}
@@ -68,13 +68,13 @@ q)-120!t         //t is in filesystem-backed memory domain
 This means that with one simple change when defining schemas tables (or subset of columns of table) can be moved to filesystem backed memory without any other codes changes to the rest of the system. This was accomplished using the following two functions.
 ```
 .mUtil.colsToDotM:{[t;cs] // ex .mUtil.colsToDotM[`trade;`price`size]
-	/enusre cs is list
-	cs,:();
-	/pull out columns to move an assign in .m namespace
-	(` sv `.m,t) set ?[t;();0b;cs!cs];
-	/replace columns in table
-	t set get[t],'.m[t];
-	}
+ /enusre cs is list
+ cs,:();
+ /pull out columns to move an assign in .m namespace
+ (` sv `.m,t) set ?[t;();0b;cs!cs];
+ /replace columns in table
+ t set get[t],'.m[t];
+ }
 
 .mUtil.tblToDotM:.mUtil.colsToDotM[;()]
 ```
@@ -83,6 +83,33 @@ The difference then between running a DRAM rdb and appDirect rdb is starting it 
 .mUtil.tblToDotM each tables[];
 ```
 After loading the standard schema file.
+
+### Accessing file system backed memory - (this could be whole seperate blog)
+
+As extra note we need to be aware When accessing the data from this new memory domain that if use our convential method and existing apis we will most likely at whatever stage we filter or aggregate or create new variables from that data it will be assigned a new spot in the memory.
+There will be an inital over head for pulling the data from app direct instead of dram. After that once we cause kdb to assign data to new memory space it will get assigned in dram and everything from that point on will be as fast as it was in a dram rdb.
+
+This is important as we have the ability to spin up many more instances of rdb, but when we query via api or otherwise new allocations will be made to dram. want to ensure your system doesnt try to sort whole quote table in all the rdbs at the same time as will quickly run out of dram.
+
+However if we define code within the .m namespace then any intermediateis there created there will use the -m domain. 
+
+So if we had a very memory intensive piece of code to run something like end of day we could define the code in .m namespace and run all of it without using any dram.
+Proof:
+```
+q)n:1000000;.m.tab:tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
+q)f:{`s`t xasc tab}
+q)\d .m
+q.m)f:{`s`t xasc tab}
+q.m)\d .
+q)\ts f[]
+133 41944096
+q)\ts .m.f[]
+351 512
+q)f[]~.m.f[]
+1b
+```
+
+Whoever this is out of scope for what we are looking at here.
 
 <a name="testing"/>
 
@@ -105,29 +132,8 @@ Please find a more detailed description of the [arcitecture](#arcitecture) in th
 
 ## Findings
 
-```
-vvvvvvvvvvvvvvvv dont think any of this is still relavent vvvvvvvvvvvvvvvv
-This test was run with ticker plant in a 1s batch publish mode. And Querys hitting the rdbs every 2 seconds.
-
-![fig - Compare max quote time](figs/compMqtl.png)
-
-In this case although we see spikes in the maximium latency for the appDirect rdb.
-The latency remains very small through out. And is able to keep ingesting data from the tp without falling behind.
-
-The issue is whenever we decrease the batching and the query the rdb more regularly. Simulating a more latency sensitive system
-Here the tp was publish in 50ms batchs and querys running on rdbs every 1 second.
-
-![fig - Compare max quote time](figs/compMqtl2.png)
-
-We can see now that the appDirect rdb falls very far behind compared to the DRAM rdb.
-
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
-```
-
-### On a server that maxed out with 2 DRAM rdbs we could run 10 PMEM rdbs!
+### On a server that maxed out with 2 DRAM rdbs we could run 10 appDirect rdbs!
 we have mainly explored the capabilities of the standard tick systems abilities to keep latency low and process data while using pmem instead of dram. And expanding the capabilities of an existing server. We can run 10 optane rdbs at same time. And have very low mem usage. However you need to design to ensure you dont try to pull all the mem into dram durring queries.
- .i.e a:-9!-8!select from quote on all the rdbs will blow up system.
-This is the same way you dont just run 20 slaves on your rdb as the memorary would blow up as it intermediatary data to DRAM.
 
 ### (AGG ENGINE IN PMEM = BAD)
 It's worth nothing for our aggregation engines, we kept all the caches and required data in DRAM as Optane does have I/O restrictions and an engine which is constantly reading and writing small ticks would not be the optimal use case for the technology.
@@ -162,15 +168,13 @@ While it isn't primarily marketed as a DRAM replacement technology, we found it 
 ## About the authors
 [Eoin Cunning](https://www.linkedin.com/in/eoin-cunning-b7195a67) is a kdb+ consultant, based in London, who has worked on several kx solutions projects and currently works on a market data system for a leading global market maker firm.
 
-[Nick McDaid](https://www.linkedin.com/in/nmcdaid/) is ... a bollox
+[Nick McDaid](https://www.linkedin.com/in/nmcdaid/) is a kdb+ consultant, based in London who has worked as a developer in multiple top tier banks and currently works as a devolper in a European hedge fund.
 
 <a name="appen"/>
 
 ## Apendix
 
 ### Hardware
-
-# TODO - Intel to provide more details here on optane and the server set up.
 
 #### Server details 
 ```
