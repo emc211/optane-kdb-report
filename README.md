@@ -19,8 +19,6 @@
 [About The Authors](#authors)  
 [Appendix](#appen)
 
-<a name="Background"/>
-
 ## Background
 
 This blog assumes reader already has some knowledge of optane and persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane).
