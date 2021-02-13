@@ -12,12 +12,12 @@
 ### Table of Contents  
 
 [Background](#Background)  
-[Using filesystem backed memory](#Filesystem backed memory)  
-[Testing](#Testing)  
-[Findings](#Findings)  
-[Conclusion](#Conclusion)  
-[About The Authors](#authors)  
-[Appendix](#Appendix)
+[Using filesystem backed memory](#filesystem-backed-memory)  
+[Testing](#testing)  
+[Findings](#findings)  
+[Conclusion](#conclusion)  
+[About The Authors](#about-the-authors)  
+[Appendix](#appendix)
 
 ## Background
 
