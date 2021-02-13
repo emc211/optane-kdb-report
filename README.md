@@ -12,12 +12,12 @@
 ### Table of Contents  
 
 [Background](#Background)  
-[Using filesystem backed memory](#FilesystemBackedMemory)  
-[Testing](#testing)  
-[Findings](#findings)  
-[Conclusion](#conclusion)  
+[Using filesystem backed memory](#Filesystem backed memory)  
+[Testing](#Testing)  
+[Findings](#Findings)  
+[Conclusion](#Conclusion)  
 [About The Authors](#authors)  
-[Appendix](#appen)
+[Appendix](#Appendix)
 
 ## Background
 
@@ -26,8 +26,6 @@ This blog assumes reader already has some knowledge of optane and persistent mem
 While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane). However there as yet, has been no published research using Optane as a volatile memory source.
 
 This blog post looks at running the realtime elements of a kdb+ market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and it documents the observed performance.
-
-<a name="FilesystemBackedMemory"/>
 
 ## Filesystem backed memory
 
@@ -121,8 +119,6 @@ q)f[]~.m.f[]
 
 Whoever this is out of scope for what we are looking at here.
 
-<a name="testing"/>
-
 ## Testing Framework
 The Framework designed to test how optane chips can be deployed is a common market data capture solution. Based on the standard [tick setup](https://github.com/KxSystems/kdb-tick)
 
@@ -138,8 +134,6 @@ To ensure a sufficient stress test, the system simulates the volume and velocity
 The above was considered a "stack". We ran four stacks concurrently for our testing. Two fully hosted in DRAM and two with their RDBs hosted in Optane.
 
 Please find a more detailed description of the [architecture](#arcitecture) in the appendix.
-
-<a name="findings"/>
 
 ## Findings
 
@@ -162,8 +156,6 @@ but we seemed to run into issues with the reads more than writing the data.
 This is possibly because generally kdb will write small amounts of data throughout the the pmem.
 But queries can attempt to access all the data in pmem. .e.g max quote\`time
 
-<a name="conclusion"/>
-
 ## Conclusion
 
 - It is possible to run rdbs with data stored in optane instead of dram. Code required for such changes is outlined.
@@ -180,14 +172,10 @@ While it isn't primarily marketed as a DRAM replacement technology, we found it 
 - using optane for large static tables that take up a lot of room in mem but are queried so often take to long to have written to disk. .e.d flat-file table you load into hdbs or reference data tables saved in gateways
 - replay performance - we have seen write contention so be interesting to explore how replay would work for pmem rdbs. This would probably stress test the write performance to the pmem mounts. May need to batch updates and and write to dram as intermediary
 
-<a name="authors"/>
-
 ## About the authors
 [Eoin Cunning](https://www.linkedin.com/in/eoin-cunning-b7195a67) is a kdb+ consultant, based in London, who has worked on several kx solutions projects and currently works on a market data system for a leading global market maker firm.
 
 [Nick McDaid](https://www.linkedin.com/in/nmcdaid/) is a kdb+ consultant, based in London who has worked as a developer in multiple top tier banks and currently works as a developer in a European hedge fund.
-
-<a name="appen"/>
 
 ## Appendix
 
@@ -253,8 +241,6 @@ chmod 777 /mnt/pmem1
 
 #### Numa settings
 The standard [recommendation](https://code.kx.com/q/kb/linux-production/) when using numa is to set --interleave=all ` numactl --interleave=all q ` but found better performance in aligning the numa nodes with the persistent memorary namespaces `numactl -N 0 -m 0  q -q -m /mnt/pmem0/` and `numactl -N 1 -m 1  q -q -m /mnt/pmem1/`
-
-<a name="arcitecture"/>
 
 ### Testing Framework Architecture
 
