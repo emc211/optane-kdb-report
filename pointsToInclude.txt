@@ -7,6 +7,8 @@ How fast are raw insert?
 
 Is it fast at loads of concurrent queries while getting written to?
 
+/ compare mem usage in domains
+q){d:.Q.w[];system"d .m";o:.Q.w[];system"d .";(`used`mphy#(d;o))%1024 xexp 3}[]
 
 / Latency to query rdb vs optane rdb
 q)\ts rdb2".z.p  - first exec max time from quote"

@@ -9,11 +9,11 @@
 - Compared the performance versus regular dram in these scenarios for several combinations of the system variables mentioned.
 - Found that there are scenarios where storing rdb data in Optane is a viable option and in these case the addition of Optane to an existing server should expand capacity where using traditional hardware would mean requiring to get additional servers.
 
-### Table of Contents
+## Table of Contents
 
 - [Using Intel® Optane™ memory to expand the capacity of a typical kdb market data system](#using-intel-optane-memory-to-expand-the-capacity-of-a-typical-kdb-market-data-system)
   - [Abstract](#abstract)
-    - [Table of Contents](#table-of-contents)
+  - [Table of Contents](#table-of-contents)
   - [Background](#background)
   - [Filesystem backed memory](#filesystem-backed-memory)
     - [Writing functions to use file system backed memory - (this could be whole separate blog)](#writing-functions-to-use-file-system-backed-memory---this-could-be-whole-separate-blog)
@@ -40,7 +40,7 @@
 
 ## Background
 
-This blog assumes reader already has some knowledge of Optane persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane).
+This blog assumes reader already has some knowledge of Optane persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane). Also very good tech talk from [AquaQ](https://www.aquaq.co.uk/q/aquaquarantine-kdb-tech-talks-2/#optane).
 
 While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane). However there as yet, has been no published research using Optane as a volatile memory source.
 
@@ -48,7 +48,7 @@ This blog post looks at running the realtime elements of a kdb+ market data stac
 
 ## Filesystem backed memory
 
-TODO should we add a more thorough explanation of appDirect mode
+TODO should we add a more thorough explanation of appDirect mode what is optane ? prices ?
 
 ```q
 https://thessdguy.com/intels-optane-two-confusing-modes-part-3-app-direct-mode/ 
@@ -156,7 +156,7 @@ To ensure a sufficient stress test, the system simulates the volume and velocity
 
 The above was considered a "stack". We ran four stacks concurrently for our testing. Two fully hosted in DRAM and two with their RDBs hosted in Optane.
 
-Please find a more detailed description of the [architecture](#arcitecture) in the appendix.
+A more detailed description of the [architecture](#arcitecture) can be found in the appendix.
 
 ## Findings
 
@@ -173,7 +173,7 @@ sh runConcurrentMemoryTypesTesting.sh
 
 ### On a server that maxed out with 2 DRAM rdbs we could run 10 appDirect rdbs
 
-we have mainly explored the capabilities of the standard tick systems abilities to keep latency low and process data while using PMEM instead of dram. And expanding the capabilities of an existing server. We can run 10 Optane rdbs at same time. And have very low memory usage. However you need to design to ensure you don't try to pull all the memory into dram during queries.
+we have mainly explored the capabilities of the standard tick systems abilities to keep latency low and process data while using PMEM instead of DRAM. And expanding the capabilities of an existing server. We can run 10 Optane rdbs at same time. And have very low memory usage. However you need to design to ensure you don't try to pull all the memory into dram during queries.
 
 DEMONSTRATE
 
@@ -198,10 +198,11 @@ But queries can attempt to access all the data in PMEM. .e.g `exec max time from
 ## Conclusion
 
 - It is possible to run rdbs with data stored in Optane instead of dram. Code required for such changes is outlined.
-- There is a trade off in performance for querying from persistent memory. Can be seen to be 2-5x slower.
+- There is a trade off in performance for querying from file system backed memory. Can be seen to be 2-5x slower for raw data pull. But as you move to more aggregated cpu bound type queries this can become almost negligible.
 - Possible that just trying to convert a working rdb to Optane. This slow down in read speed will cause queries to take longer and could result in rdb delaying processing of of new messages for tp.
 - If a rdb is already seeing very high query volumes may not be advisable to move everything to Optane memory.
 - More realistic use case is if you have columns that are seldom queried that subset of columns could be moved to .m namespace freeing up ram for more rdbs.
+- Not only is same amount of memory cheaper in optane compared to DRAM but the max size optane chips is significantly larger than for DRAM. Meaning the memory limit of single server is significantly increased.  
 
 While it isn't primarily marketed as a DRAM replacement technology, we found it was a very helpful addition in augmenting the volatile memory capacity of a server hosting realtime data.
 
