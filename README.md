@@ -215,7 +215,7 @@ Reduce cost of infrastructure running with less servers and DRAM to support data
 #### Server details
 
 ```bash
-|18:05:28|user@clx4:[q]> lscpu
+[root@clx4 ~]# lscpu
 Architecture:        x86_64
 CPU op-mode(s):      32-bit, 64-bit
 Byte Order:          Little Endian
@@ -242,6 +242,61 @@ L3 cache:            39424K
 NUMA node0 CPU(s):   0-27
 NUMA node1 CPU(s):   28-55
 Flags:               fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cdp_l3 invpcid_single ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm cqm mpx rdt_a avx512f avx512dq rdseed adx smap clflushopt clwb intel_pt avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req pku ospke avx512_vnni md_clear flush_l1d arch_capabilities
+[root@clx4 ~]# free -h 
+              total        used        free      shared  buff/cache   available
+Mem:          374Gi       5.0Gi       352Gi        29Mi        17Gi       367Gi
+Swap:         4.0Gi       0.0Ki       4.0Gi
+[root@clx4 ~]# 
+[root@clx4 ~]# df -h
+Filesystem           Size  Used Avail Use% Mounted on
+devtmpfs             188G     0  188G   0% /dev
+tmpfs                188G     0  188G   0% /dev/shm
+tmpfs                188G   27M  188G   1% /run
+tmpfs                188G     0  188G   0% /sys/fs/cgroup
+/dev/mapper/cl-root   50G  8.0G   43G  16% /
+/dev/mapper/cl-home  690G   84G  607G  13% /home
+/dev/sda1            976M  257M  653M  29% /boot
+tmpfs                 38G   20K   38G   1% /run/user/42
+tmpfs                 38G     0   38G   0% /run/user/1000
+/dev/pmem0           732G   73M  695G   1% /mnt/pmem0
+/dev/pmem1           732G   73M  695G   1% /mnt/pmem1
+[root@clx4 ~]# 
+[root@clx4 ~]# ipmctl show -topology
+ DimmID | MemoryType                  | Capacity    | PhysicalID| DeviceLocator 
+================================================================================
+ 0x0001 | Logical Non-Volatile Device | 126.375 GiB | 0x0026    | CPU1_DIMM_A2
+ 0x0011 | Logical Non-Volatile Device | 126.375 GiB | 0x0028    | CPU1_DIMM_B2
+ 0x0021 | Logical Non-Volatile Device | 126.375 GiB | 0x002a    | CPU1_DIMM_C2
+ 0x0101 | Logical Non-Volatile Device | 126.375 GiB | 0x002c    | CPU1_DIMM_D2
+ 0x0111 | Logical Non-Volatile Device | 126.375 GiB | 0x002e    | CPU1_DIMM_E2
+ 0x0121 | Logical Non-Volatile Device | 126.375 GiB | 0x0030    | CPU1_DIMM_F2
+ 0x1001 | Logical Non-Volatile Device | 126.375 GiB | 0x0032    | CPU2_DIMM_A2
+ 0x1011 | Logical Non-Volatile Device | 126.375 GiB | 0x0034    | CPU2_DIMM_B2
+ 0x1021 | Logical Non-Volatile Device | 126.375 GiB | 0x0036    | CPU2_DIMM_C2
+ 0x1101 | Logical Non-Volatile Device | 126.375 GiB | 0x0038    | CPU2_DIMM_D2
+ 0x1111 | Logical Non-Volatile Device | 126.375 GiB | 0x003a    | CPU2_DIMM_E2
+ 0x1121 | Logical Non-Volatile Device | 126.375 GiB | 0x003c    | CPU2_DIMM_F2
+ N/A    | DDR4                        | 32.000 GiB  | 0x0025    | CPU1_DIMM_A1
+ N/A    | DDR4                        | 32.000 GiB  | 0x0027    | CPU1_DIMM_B1
+ N/A    | DDR4                        | 32.000 GiB  | 0x0029    | CPU1_DIMM_C1
+ N/A    | DDR4                        | 32.000 GiB  | 0x002b    | CPU1_DIMM_D1
+ N/A    | DDR4                        | 32.000 GiB  | 0x002d    | CPU1_DIMM_E1
+ N/A    | DDR4                        | 32.000 GiB  | 0x002f    | CPU1_DIMM_F1
+ N/A    | DDR4                        | 32.000 GiB  | 0x0031    | CPU2_DIMM_A1
+ N/A    | DDR4                        | 32.000 GiB  | 0x0033    | CPU2_DIMM_B1
+ N/A    | DDR4                        | 32.000 GiB  | 0x0035    | CPU2_DIMM_C1
+ N/A    | DDR4                        | 32.000 GiB  | 0x0037    | CPU2_DIMM_D1
+ N/A    | DDR4                        | 32.000 GiB  | 0x0039    | CPU2_DIMM_E1
+ N/A    | DDR4                        | 32.000 GiB  | 0x003b    | CPU2_DIMM_F1
+[root@clx4 ~]# 
+[root@clx4 ~]# ipmctl show -memoryresources
+ MemoryType   | DDR         | PMemModule   | Total        
+==========================================================
+ Volatile     | 381.500 GiB | 0.000 GiB    | 381.500 GiB
+ AppDirect    | -           | 1512.000 GiB | 1512.000 GiB
+ Cache        | 0.000 GiB   | -            | 0.000 GiB
+ Inaccessible | 2.500 GiB   | 5.066 GiB    | 7.566 GiB
+ Physical     | 384.000 GiB | 1517.066 GiB | 1901.066 GiB
 ```
 
 #### Server set up for appDirect
