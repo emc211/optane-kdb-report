@@ -126,16 +126,16 @@ However if we define code within the .m namespace then any intermediates there c
 So if we had a very memory intensive piece of code to run something like end of day we could define the code in .m namespace and run all of it without using any dram.
 
 ```q
-q)n:1000000;.m.tab:tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
-q)f:{`s`t xasc tab}
+q)n:1000000;tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
+q)f:{`s`t xasc x}
 q)\d .m
-q.m)f:{`s`t xasc tab}
+q.m)f:{`s`t xasc x}
 q.m)\d .
-q)\ts f[]
+q)\ts f tab
 133 41944096
-q)\ts .m.f[]
+q)\ts .m.f tab
 351 512
-q)f[]~.m.f[]
+q)f[tab]~.m.f[tab]
 1b
 ```
 
@@ -159,6 +159,17 @@ The above was considered a "stack". We ran four stacks concurrently for our test
 Please find a more detailed description of the [architecture](#arcitecture) in the appendix.
 
 ## Findings
+
+### Apples to Apples
+Run 2 dram rdbs versus 2 appDirect rdbs.
+
+```
+#from bin directory
+source testing.env
+sh runConcurrentMemoryTypesTesting.sh
+```
+
+
 
 ### On a server that maxed out with 2 DRAM rdbs we could run 10 appDirect rdbs
 
