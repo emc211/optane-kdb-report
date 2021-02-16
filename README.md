@@ -4,7 +4,7 @@
 
 ## Abstract
 
-- Wrote a test suite to examine the latency of a typical real time kdb solution. To compare and contrast the effects of different volumes of data and throughput rates among other variables.
+- Wrote a test suite to examine the latency of a typical real time kdb market data system. To compare and contrast the effects of different volumes of data and throughput rates among other variables.
 - Wrote tools to easily configure the splitting of real time data between dram and filesystem backed memory.
 - Compared the performance versus regular dram in these scenarios for several combinations of the system variables mentioned.
 - Found that there are scenarios where storing rdb data in Optane is a viable option and in these case the addition of Optane to an existing server should expand capacity where using traditional hardware would mean requiring to get additional servers.
@@ -114,16 +114,11 @@ The difference then between running a DRAM rdb and appDirect rdb is starting it 
 
 After loading the standard schema file.
 
-### Writing functions to use file system backed memory - (this could be whole separate blog)
+### Defining functions to use file system backed memory
 
-As extra note we need to be aware When accessing the data from this new memory domain that if use our conventional method and existing apis we will most likely at whatever stage we filter or aggregate or create new variables from that data it will be assigned a new spot in the memory.
-There will be an initial over head for pulling the data from app direct instead of dram. After that once we cause kdb to assign data to new memory space it will get assigned in dram and everything from that point on will be as fast as it was in a dram rdb.
+We also need to be aware that it is not just data stored in tables that uses memory. Querys and functions that we run also need to assign memory and which domain they use will depend on how the function was defined.
 
-This is important as we have the ability to spin up many more instances of rdb, but when we query via api or otherwise new allocations will be made to dram. want to ensure your system doesn't try to sort whole quote table in all the rdbs at the same time as will quickly run out of dram.
-
-However if we define code within the .m namespace then any intermediates there created there will use the -m domain.
-
-So if we had a very memory intensive piece of code to run something like end of day we could define the code in .m namespace and run all of it without using any dram.
+Here for example we compare the same code defind in both the root and .m namespace.
 
 ```q
 q)n:1000000;tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
@@ -139,7 +134,13 @@ q)f[tab]~.m.f[tab]
 1b
 ```
 
-We did explore this functionality and some utility functions are available in mutil.q script to redefine functions and namespaces to allocate memory to file system back memory instead of DRAM but was deemed to be out of scope for this post.
+For this kind of sort we need to make a full copy of the data. When running the function defined in .m that copy is assigned to the file system backed memory saving a huge amount of DRAM memory allocation while sacrifcing a little speed as we write to appDirect instead of DRAM. One possible praticle use case of this could be running your end of day code like this to avoid a spike in DRAM usage.
+
+We did explore this functionality and some utility functions are available in mutil.q script to redefine functions and namespaces to allocate memory to file system back memory instead of DRAM but exploring uses of this further was deemed to be out of scope for this post.
+
+We do however have to be aware of it as if we arent defining code in the .m namespace then we will be constrained to the amount of DRAM we have. If we have more memory stored in appDirect that there is DRAM available and have queries that copies a lot of the data we could run out of DRAM.
+
+So if leaving an existing api/query code as is there will be an initial over head for pulling the data from appDirect instead of dram. After that once we cause kdb to assign data to new memory space it will get assigned in dram and everything from that point on should be as fast as it was in a dram rdb.
 
 ## Testing Framework
 
@@ -161,15 +162,14 @@ A more detailed description of the [architecture](#arcitecture) can be found in 
 ## Findings
 
 ### Apples to Apples
-Run 2 dram rdbs versus 2 appDirect rdbs.
+Run 2 dram rdbs versus 2 appDirect rdbs. This seems to run fine until up the query rate then strangely aggEngine falling behind but not trade / quote.
+Make time of monitor env variable and have as input and record
 
-```
+```bash 
 #from bin directory
 source testing.env
 sh runConcurrentMemoryTypesTesting.sh
 ```
-
-
 
 ### On a server that maxed out with 2 DRAM rdbs we could run 10 appDirect rdbs
 
