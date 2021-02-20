@@ -1,13 +1,13 @@
-# Using Intel® Optane™ memory to expand the capacity of a typical kdb market data system
+# Using Intel® Optane™ memory to expand the capacity of a typical realtime kdb market data system
 
-[by Nick McDaid and Eoin Cunning](#authors)
+[by Eoin Cunning and Nick McDaid](#authors)
 
 ## Abstract
 
-- Wrote a test suite to examine the latency of a typical real time kdb market data system. To compare and contrast the effects of different volumes of data and throughput rates among other variables.
-- Wrote tools to easily configure the splitting of real time data between dram and filesystem backed memory.
-- Compared the performance versus regular dram in these scenarios for several combinations of the system variables mentioned.
-- Found that there are scenarios where storing rdb data in Optane is a viable option and in these case the addition of Optane to an existing server should expand capacity where using traditional hardware would mean requiring to get additional servers.
+- Wrote a test suite to examine the latency of a typical real time kdb market data system bench marked against one of the busiest day for US equities in 2020
+- Wrote tools to easily configure the splitting of real time data between dram and filesystem backed memory
+- Compared the performance of DRAM vs Optane Memory
+- Found that Optane is a viable solution to augment the realtime capacity of a kdb system and allows better utilisation of existing hardware where DRAM was previously a limiting factor
 
 ## Table of Contents
 
@@ -40,21 +40,15 @@
 
 ## Background
 
-This blog assumes reader already has some knowledge of Optane persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane). Also very good tech talk from [AquaQ](https://www.aquaq.co.uk/q/aquaquarantine-kdb-tech-talks-2/#optane).
+This blog assumes reader already has some knowledge of Optane persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane). A very good tech talk is available from [AquaQ](https://www.aquaq.co.uk/q/aquaquarantine-kdb-tech-talks-2/#optane).
 
-While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane). However there as yet, has been no published research using Optane as a volatile memory source.
+While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane), there as yet, has been no published research using Optane as a volatile memory source.
 
-This blog post looks at running the realtime elements of a kdb+ market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and it documents the observed performance.
+This blog post looks at running the realtime elements of a kdb market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and documents the observed performance.
 
 ## Filesystem backed memory
 
-TODO should we add a more thorough explanation of appDirect mode what is optane ? prices ?
-
-```q
-https://thessdguy.com/intels-optane-two-confusing-modes-part-3-app-direct-mode/ 
-```
-
-Filesystem backed memory is a available in kdb by use of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 4.0.
+Filesystem backed memory is available in kdb by use of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 4.0.
 
 From kdb release notes:
 
@@ -91,7 +85,7 @@ q)-120!t         //t is in filesystem-backed memory domain
 1
 ```
 
-This means that with one simple change when defining schemas tables (or subset of columns of table) can be moved to filesystem backed memory without any other codes changes to the rest of the system. This was accomplished using the following two functions from the [mutil.q](../src/q/feed.q) script.
+This means that with one simple change when defining schemas tables (or subset of columns of table) can be moved to filesystem backed memory without any other codes changes to the rest of the system. This was accomplished using the following two functions from the [mutil.q](../src/q/mutil.q) script. 
 
 ```q
 .mutil.colsToDotM:{[t;cs] // ex .mutil.colsToDotM[`trade;`price`size]
@@ -106,22 +100,23 @@ This means that with one simple change when defining schemas tables (or subset o
 .mutil.tblToDotM:.mUtil.colsToDotM[;()]
 ```
 
-The difference then between running a DRAM rdb and appDirect rdb is starting it with the [-m option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and running
+The only difference between running a DRAM and Optane rdb is starting it with the [-m option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and running
 
 ```q
 .mutil.tblToDotM each tables[];
 ```
 
-After loading the standard schema file.
+After loading the standard schema file. This utility also allows users to move less frequently accessed columns, such as timestamps only required for debugging, out of DRAM and into Optane for a hybrid DRAM/Optane solution.
 
 ### Defining functions to use file system backed memory
 
 We also need to be aware that it is not just data stored in tables that uses memory. Querys and functions that we run also need to assign memory and which domain they use will depend on how the function was defined.
 
-Here for example we compare the same code defind in both the root and .m namespace.
+Here for example we compare the same functionality defind in both the root and .m namespace.
 
 ```q
-q)n:1000000;tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
+q)n:1000000
+q)tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
 q)f:{`s`t xasc x}
 q)\d .m
 q.m)f:{`s`t xasc x}
@@ -134,7 +129,7 @@ q)f[tab]~.m.f[tab]
 1b
 ```
 
-For this kind of sort we need to make a full copy of the data. When running the function defined in .m that copy is assigned to the file system backed memory saving a huge amount of DRAM memory allocation while sacrifcing a little speed as we write to appDirect instead of DRAM. One possible praticle use case of this could be running your end of day code like this to avoid a spike in DRAM usage.
+A full copy of the data is required for the sort listed above. When running the function defined in the .m namespace, that copy is assigned to the filesystem backed memory. While this results in a drop off in performance, it does provide a huge saving of DRAM memory. This could be very useful in instances where users need to run multiple concurrent backloaders or are struggling to perform end of day sorts with all the data in memory.
 
 We did explore this functionality and some utility functions are available in mutil.q script to redefine functions and namespaces to allocate memory to file system back memory instead of DRAM but exploring uses of this further was deemed to be out of scope for this post.
 
