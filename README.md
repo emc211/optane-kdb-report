@@ -40,52 +40,13 @@
 
 ## Background
 
-This blog assumes reader already has some knowledge of Optane persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane). A very good tech talk is available from [AquaQ](https://www.aquaq.co.uk/q/aquaquarantine-kdb-tech-talks-2/#optane).
+While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane), there as yet, has been no published research using Optane as a volatile memory source. Traditionally the bottle neck of market data platforms has been the amount of DRAM on a server, which in turn determines how many RDB's a server can host to serve queries for the most recent days data. This blog looks at wether Optane can be used to help solve this problem when mounted in DAX enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and documents the observed performance.
 
-While there has been research published in the kdb community showing the effectiveness of Optane as an extremely fast disk, ["performing up to almost 10 times faster than when run against high-performance NVMe"](https://kx.com/blog/overcoming-the-memory-challenge-with-optane), there as yet, has been no published research using Optane as a volatile memory source.
-
-This blog post looks at running the realtime elements of a kdb market data stack on Optane Memory, mounted in DAX Enabled App Direct Mode. It also provides a few useful utilities for moving your data into Optane with minimal effort, and documents the observed performance.
+It is assumed the reader already has some knowledge of kdb, Optane persistent memory and how kdb has been adapted to interact with it. More information on this [here](https://code.kx.com/q/kb/optane). A good tech talk is also available from [AquaQ](https://www.aquaq.co.uk/q/aquaquarantine-kdb-tech-talks-2/#optane).
 
 ## Filesystem backed memory
 
-Filesystem backed memory is available in kdb by use of the [.m namespace](https://code.kx.com/q/ref/dotm/) added to kdb in version 4.0.
-
-From kdb release notes:
-
-```q
-2019.10.22
-NUC
-memory can be backed by a filesystem, allowing use of dax-enabled filesystems (e.g. AppDirect) as a non-persistent memory extension for kdb+.
-cmd line option -m path to use the filesystem path specified as a separate memory domain. This splits every thread's heap in to two:
-  domain 0: regular anonymous memory (active and used for all allocs by default)
-  domain 1: filesystem-backed memory
- .m namespace is reserved for objects in domain 1, however names from other namespaces can reference them too, e.g. a:.m.a:1 2 3
- \d .m changes current domain to 1, causing it to be used by all further allocs. \d .anyotherns sets it back to 0
- .m.x:x ensures the entirety of .m.x is in the domain 1, performing a deep copy of x as needed (objects of types 100-103h,112h are not copied and remain in domain 0)
- lambdas defined in .m set current domain to 1 during execution. This will nest since other lambdas don't change domains:
-c  q)\d .myns
-  q)g:{til x}
-  q)\d .m
-  q)w:{system"w"};f:{.myns.g x}
-  q)\d .
-  q)x:.m.f 1000000;.m.w` / x allocated in domain 1
- -120!x returns x's domain (currently 0 or 1), e.g 0 1~-120!'(1 2 3;.m.x:1 2 3)
- \w returns memory info for the current domain only:
-  q)value each ("\\d .m";"\\w";"\\d .";"\\w")
--w limit (M1/m2) is no longer thread-local, but domain-local; cmdline -w, \w set limit for domain 0
-mapped is a single global counter, same in every thread's \w
-```
-
-An important note for the concept for storing tables is:
-
-```q
-q)t:.m.t:til 10  //define variable in .m then another variable that will point to same space in memory
-q)t,:10          //append to t
-q)-120!t         //t is in filesystem-backed memory domain
-1
-```
-
-This means that with one simple change when defining schemas tables (or subset of columns of table) can be moved to filesystem backed memory without any other codes changes to the rest of the system. This was accomplished using the following two functions from the [mutil.q](../src/q/mutil.q) script. 
+Filesystem backed memory is available in kdb by use of the [-m command line option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and the [.m namespace](https://code.kx.com/q/ref/dotm/). To move a table or some columns into filesystem backed memory,such as Optane, you simply define them in the .m namespace without any other codes changes required. This can be accomplished by using the following two functions from the [mutil.q](../src/q/mutil.q) script. 
 
 ```q
 .mutil.colsToDotM:{[t;cs] // ex .mutil.colsToDotM[`trade;`price`size]
@@ -100,50 +61,20 @@ This means that with one simple change when defining schemas tables (or subset o
 .mutil.tblToDotM:.mUtil.colsToDotM[;()]
 ```
 
-The only difference between running a DRAM and Optane rdb is starting it with the [-m option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and running
+The only difference between running a DRAM and Optane rdb is starting it with -m option pointing to filesystem backed memory, and running the following command after loading the  schema into a process:
 
 ```q
 .mutil.tblToDotM each tables[];
 ```
 
-After loading the standard schema file. This utility also allows users to move less frequently accessed columns, such as timestamps only required for debugging, out of DRAM and into Optane for a hybrid DRAM/Optane solution.
+Using .mutil.colsToDotM rather than .mutil.tblToDotM allows users to move a subset of columns into Optane, giving a hybrid model which allow users to keep their most accessed data in DRAM and less frequently accessed columns in Optane. 
 
-### Defining functions to use file system backed memory
-
-We also need to be aware that it is not just data stored in tables that uses memory. Querys and functions that we run also need to assign memory and which domain they use will depend on how the function was defined.
-
-Here for example we compare the same functionality defind in both the root and .m namespace.
-
-```q
-q)n:1000000
-q)tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
-q)f:{`s`t xasc x}
-q)\d .m
-q.m)f:{`s`t xasc x}
-q.m)\d .
-q)\ts f tab
-133 41944096
-q)\ts .m.f tab
-351 512
-q)f[tab]~.m.f[tab]
-1b
-```
-
-A full copy of the data is required for the sort listed above. When running the function defined in the .m namespace, that copy is assigned to the filesystem backed memory. While this results in a drop off in performance, it does provide a huge saving of DRAM memory. This could be very useful in instances where users need to run multiple concurrent backloaders or are struggling to perform end of day sorts with all the data in memory.
-
-We did explore this functionality and some utility functions are available in mutil.q script to redefine functions and namespaces to allocate memory to file system back memory instead of DRAM but exploring uses of this further was deemed to be out of scope for this post.
-
-We do however have to be aware of it as if we arent defining code in the .m namespace then we will be constrained to the amount of DRAM we have. If we have more memory stored in appDirect that there is DRAM available and have queries that copies a lot of the data we could run out of DRAM.
-
-So if leaving an existing api/query code as is there will be an initial over head for pulling the data from appDirect instead of dram. After that once we cause kdb to assign data to new memory space it will get assigned in dram and everything from that point on should be as fast as it was in a dram rdb.
 
 ## Testing Framework
 
-The Framework designed to test how Optane chips can be deployed is a common market data capture solution. Based on the standard [tick setup](https://github.com/KxSystems/kdb-tick)
+The Framework was designed to minic the flow of a typical kdb market data capture system and then test the performance of storing the data in DRAM vs Optane. The capture section of the framework was largely base on the standard tick architecture [tick setup](https://github.com/KxSystems/kdb-tick)
 
-The traditional bottle neck of market data platforms has been the amount of DRAM on a server, which in turn determines how many RDB's a server can host. There are a number of ways to try and get around this limitation, such as directing users to aggregated services such as second or minute bucketed data where possible, however when a user requires tick by tick precision, there is no other option other routing the query to the raw data in the RDB.
-
-To ensure a sufficient stress test, the system simulates the volume and velocity of market data processed during the market crash on March 9th 2020. We prestressed the RDB with 65 million records, and then sent 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio. A ticker-plant consumed this feed and on a 50ms timer, disturbed the messages to an aggregation engine, which generated minute / daily aggregations and published these back to the ticker-plant. The RDB consumed all incoming messages. Every 2 seconds our monitor process would query the RDB and measure:
+o ensure a sufficient stress test, the system simulates the volume and velocity of market data processed during the market crash on March 9th 2020. We prestressed the RDB with 65 million records, and then sent 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio. A ticker-plant consumed this feed and on a 50ms timer, disturbed the messages to an aggregation engine, which generated minute / daily aggregations and published these back to the ticker-plant. The RDB consumed all incoming messages. Every 2 seconds our monitor process would query the RDB and measure:
 
 - Max trade / quote latency (time between the tick being generated in the feed process and the tick being accessible via an RDB query)
 - Max latency on aggregated trade / quote message (as above - but also including the time for the aggregation engine to do it's calculations and it's additional messaging hops)
@@ -216,6 +147,31 @@ Reduce cost of infrastructure running with less servers and DRAM to support data
 [Nick McDaid](https://www.linkedin.com/in/nmcdaid/) is a kdb+ consultant, based in London who has worked as a developer in multiple top tier banks and currently works as a developer in a European hedge fund.
 
 ## Appendix
+
+### KDB 4.0 Release notes regarding Filesystem backed memory
+```q
+2019.10.22
+NUC
+memory can be backed by a filesystem, allowing use of dax-enabled filesystems (e.g. AppDirect) as a non-persistent memory extension for kdb+.
+cmd line option -m path to use the filesystem path specified as a separate memory domain. This splits every thread's heap in to two:
+  domain 0: regular anonymous memory (active and used for all allocs by default)
+  domain 1: filesystem-backed memory
+ .m namespace is reserved for objects in domain 1, however names from other namespaces can reference them too, e.g. a:.m.a:1 2 3
+ \d .m changes current domain to 1, causing it to be used by all further allocs. \d .anyotherns sets it back to 0
+ .m.x:x ensures the entirety of .m.x is in the domain 1, performing a deep copy of x as needed (objects of types 100-103h,112h are not copied and remain in domain 0)
+ lambdas defined in .m set current domain to 1 during execution. This will nest since other lambdas don't change domains:
+c  q)\d .myns
+  q)g:{til x}
+  q)\d .m
+  q)w:{system"w"};f:{.myns.g x}
+  q)\d .
+  q)x:.m.f 1000000;.m.w` / x allocated in domain 1
+ -120!x returns x's domain (currently 0 or 1), e.g 0 1~-120!'(1 2 3;.m.x:1 2 3)
+ \w returns memory info for the current domain only:
+  q)value each ("\\d .m";"\\w";"\\d .";"\\w")
+-w limit (M1/m2) is no longer thread-local, but domain-local; cmdline -w, \w set limit for domain 0
+mapped is a single global counter, same in every thread's \w
+```
 
 ### Hardware
 
@@ -364,3 +320,33 @@ This aims to ensure that the ram is already somewhat saturated. Full code availa
 The Monitor process connects to the rdb and collect performance stats on a timer. Main measurements are for latency of quote table this will track if messages getting queued from the tp, quote stats table if this falls behind indicates issue in aggEngine and the query time which measures how long it takes to run some typical rdb queries .e.g aj
 On start up this process also kicks off the feed once having successfully connected to rdb to start testing run.
 Once endTime has been reached the stats collected are aggregated and written to csv file. Again link for full code available [here](../src/q/monitorPerf.q)
+
+### Defining functions to use file system backed memory 
+(Is this moving off topic for this report?)
+
+We also need to be aware that it is not just data stored in tables that uses memory. Querys and functions that we run also need to assign memory and which domain they use will depend on how the function was defined.
+
+Here for example we compare the same functionality defind in both the root and .m namespace.
+
+```q
+q)n:1000000
+q)tab:([]t:n?.z.n;s:n?`4;n?100f;n?100)
+q)f:{`s`t xasc x}
+q)\d .m
+q.m)f:{`s`t xasc x}
+q.m)\d .
+q)\ts f tab
+133 41944096
+q)\ts .m.f tab
+351 512
+q)f[tab]~.m.f[tab]
+1b
+```
+
+A full copy of the data is required for the sort listed above. When running the function defined in the .m namespace, that copy is assigned to the filesystem backed memory. While this results in a drop off in performance, it does provide a huge saving of DRAM memory. This could be very useful in instances where users need to run multiple concurrent backloaders or are struggling to perform end of day sorts with all the data in memory.
+
+We did explore this functionality and some utility functions are available in mutil.q script to redefine functions and namespaces to allocate memory to file system back memory instead of DRAM but exploring uses of this further was deemed to be out of scope for this post.
+
+We do however have to be aware of it as if we arent defining code in the .m namespace then we will be constrained to the amount of DRAM we have. If we have more memory stored in appDirect that there is DRAM available and have queries that copies a lot of the data we could run out of DRAM.
+
+So if leaving an existing api/query code as is there will be an initial over head for pulling the data from appDirect instead of dram. After that once we cause kdb to assign data to new memory space it will get assigned in dram and everything from that point on should be as fast as it was in a dram rdb.
