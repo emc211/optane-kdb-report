@@ -11,22 +11,27 @@
 
 ## Table of Contents
 
-- [Using Intel® Optane™ memory to expand the capacity of a typical kdb market data system](#using-intel-optane-memory-to-expand-the-capacity-of-a-typical-kdb-market-data-system)
+- [Using Intel® Optane™ memory to expand the capacity of a typical realtime kdb market data system](#using-intel-optane-memory-to-expand-the-capacity-of-a-typical-realtime-kdb-market-data-system)
   - [Abstract](#abstract)
   - [Table of Contents](#table-of-contents)
   - [Background](#background)
   - [Filesystem backed memory](#filesystem-backed-memory)
-    - [Writing functions to use file system backed memory - (this could be whole separate blog)](#writing-functions-to-use-file-system-backed-memory---this-could-be-whole-separate-blog)
   - [Testing Framework](#testing-framework)
   - [Findings](#findings)
-    - [On a server that maxed out with 2 DRAM rdbs we could run 10 appDirect rdbs](#on-a-server-that-maxed-out-with-2-dram-rdbs-we-could-run-10-appdirect-rdbs)
-    - [File system backed memory seems to be better suited to less volatile data storage](#file-system-backed-memory-seems-to-be-better-suited-to-less-volatile-data-storage)
+    - [Test 1](#test-1)
+    - [Test 2](#test-2)
+  - [Discussion](#discussion)
+    - [Test 1 - Optane rdbs can run using significantly less memory with correct settings](#test-1---optane-rdbs-can-run-using-significantly-less-memory-with-correct-settings)
+    - [Test 2 - We can run many more appDirect rdbs on a single server than dram rdbs](#test-2---we-can-run-many-more-appdirect-rdbs-on-a-single-server-than-dram-rdbs)
     - [Queries take longer so make sure extra services are worth it](#queries-take-longer-so-make-sure-extra-services-are-worth-it)
+    - [File system backed memory seems to be better suited to less volatile data storage](#file-system-backed-memory-seems-to-be-better-suited-to-less-volatile-data-storage)
     - [Read versus write](#read-versus-write)
-  - [Conclusion](#conclusion)
+    - [Middle ground](#middle-ground)
     - [Steps for further investigation or post could involve](#steps-for-further-investigation-or-post-could-involve)
+  - [Conclusion](#conclusion)
   - [About the authors](#about-the-authors)
   - [Appendix](#appendix)
+    - [KDB 4.0 Release notes regarding Filesystem backed memory](#kdb-40-release-notes-regarding-filesystem-backed-memory)
     - [Hardware](#hardware)
       - [Server details](#server-details)
       - [Server set up for appDirect](#server-set-up-for-appdirect)
@@ -37,6 +42,7 @@
       - [AggEngine](#aggengine)
       - [Rdb](#rdb)
       - [Monitor](#monitor)
+    - [Defining functions to use file system backed memory](#defining-functions-to-use-file-system-backed-memory)
 
 ## Background
 
@@ -69,10 +75,9 @@ The only difference between running a DRAM and Optane rdb is starting it with -m
 
 Using .mutil.colsToDotM rather than .mutil.tblToDotM allows users to move a subset of columns into Optane, giving a hybrid model which allow users to keep their most accessed data in DRAM and less frequently accessed columns in Optane. 
 
-
 ## Testing Framework
 
-The Framework was designed to minic the flow of a typical kdb market data capture system and then test the performance of storing the data in DRAM vs Optane. The capture section of the framework was largely base on the standard tick architecture [tick setup](https://github.com/KxSystems/kdb-tick)
+The Framework was designed to mimic the flow of a typical kdb market data capture system and then test the performance of storing the data in DRAM vs Optane. The capture section of the framework was largely base on the standard tick architecture [tick setup](https://github.com/KxSystems/kdb-tick)
 
 o ensure a sufficient stress test, the system simulates the volume and velocity of market data processed during the market crash on March 9th 2020. We prestressed the RDB with 65 million records, and then sent 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio. A ticker-plant consumed this feed and on a 50ms timer, disturbed the messages to an aggregation engine, which generated minute / daily aggregations and published these back to the ticker-plant. The RDB consumed all incoming messages. Every 2 seconds our monitor process would query the RDB and measure:
 
@@ -87,16 +92,16 @@ A more detailed description of the [architecture](#arcitecture) can be found in 
 
 ## Findings
 
-### Test 1 
+### Test 1
 
-Comparing 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. Figures are comparing single rdb servie in dram versus single service 
+Comparing 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. Figures are comparing single rdb service in dram versus single service 
 
-|               			   | Monitor Timer | Tp Timer |  DRAM         | AppDirect   | Comparison* |
+|                        | Monitor Timer | Tp Timer |  DRAM         | AppDirect   | Comparison* |
 | :----------------------|--------------:|-:|--------------:| -----------:| ----------: |
 | Max Latency            | 300 |50| 00:00.036520548   | 00:00.059900059    | 0.6097 |
 | Bytes in Memory        | 300 |50| 171893717664      | 5765504            | 29814  |
 | Average Query Time     | 300 |50| 00:00.047099680   | 00:00.067810036    | 0.6946 |
-| Queries per minute     | 300 |50| 200               | 200                | 1      | 
+| Queries per minute     | 300 |50| 200               | 200                | 1      |
 ||||||
 | Max Latency            | 50  |50| 00:00.125182124   | 04:45.203363517    | 7.320505e-06 |
 | Bytes in Memory        | 50  |50| 171893717648      | 5765488            | 29814        |
@@ -115,23 +120,23 @@ Comparing 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. 
 
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
 
-Max latency is slightly larger in AppDirect rdbs. As we increase frequecy with which we query rdb appDirect starts to struggle with latency more than dram.
+Max latency is slightly larger in AppDirect rdbs. As we increase frequency with which we query rdb appDirect starts to struggle with latency more than dram.
 When using a larger tp frequency of 1 second. The appDirect rdb is able to main similar latency to rdb and service same number of queries.
 
 ### Test 2
 
-Comparsion of 2 Dram rdbs running compared to 10 AppDirect Rdbs. Run with 1 second tp timer.
+Comparison of 2 Dram rdbs running compared to 10 AppDirect Rdbs. Run with 1 second tp timer.
 
-|               			         | 2 DRAM Rdbs     | 10 AppDirect Rdbs | Comparison* |
-| :----------------------------|----------------:|------------------:| -----------:| 
-| Max Latency                  | 00:01.042379141 | 00:01.040085588   | 1.000038    |
-| % Mem of Dram used on server | 63.2989         | 2.25653           | 28.05143    |
-| Average Query Time           | 00:00.046716868 | 00:00.067810036   | 0.6889374   |
-| Total Queries per minute     | 2000            | 10000             | 5           | 
+|                                 | 2 DRAM Rdbs     | 10 AppDirect Rdbs | Comparison* |
+| :-------------------------------|----------------:|------------------:| -----------:|
+| Max Latency                     | 00:01.042379141 | 00:01.040085588   | 1.000038    |
+| % Memory of Dram used on server | 63.2989         | 2.25653           | 28.05143    |
+| Average Query Time              | 00:00.046716868 | 00:00.067810036   | 0.6889374   |
+| Total Queries per minute        | 2000            | 10000             | 5           |
 
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
 
-Latency of two systems is comparable. % memorary usage is much smaller for 10 appDirect rdbs than 2 DRAM rdbs. Average query time is slightly slower in appDirect but can runs more total queries because of extra services. 
+Latency of two systems is comparable. % memory usage is much smaller for 10 appDirect rdbs than 2 DRAM rdbs. Average query time is slightly slower in appDirect but can runs more total queries because of extra services.
 
 ## Discussion
 
@@ -141,12 +146,13 @@ We can see here there is a small trade off for latency and query performance but
 When we increase the frequency with which we query the process we see that the fact that the query time takes longer means when tables are stored in appDirect means we can service less queries and can impact latency as rdb falls behind processing updates. 
 However as we increase the frequency further to every 0.2 seconds we see that this is also true for the regular dram rdb as its latency starts to build.
 
-This kind of impact depends on the system its being applied to. We see that when we increaset the tp timer to every second and are doing bigger bulk inserts then we can handle the higher query rate in appDirect. The Max latency goes up to a second which is expected because of tp timer.
+This kind of impact depends on the system its being applied to. We see that when we increased the tp timer to every second and are doing bigger bulk inserts then we can handle the higher query rate in appDirect. The Max latency goes up to a second which is expected because of tp timer.
 
 ### Test 2 - We can run many more appDirect rdbs on a single server than dram rdbs
 
-We are able to run x5 more rdb services on the exact same hardware just with the addition of optane mounts (Mounts were 85% full at the end testing period). While only using less thn 3% of the memory of the box. Increasing our abilty to services 5x the volume of queries being run on the rdbs. 
+We are able to run x5 more rdb services on the exact same hardware just with the addition of optane mounts (Mounts were 85% full at the end testing period). While only using less than 3% of the memory of the box. Increasing our ability to services 5x the volume of queries being run on the rdbs.
 We do however have to be wary of trying to access too much of the data in optane at the same time. Similar to how it standard set up we need to ensure we have enough memory to do calculations. 
+If we need code to access more memory than is available this can also use appDirect memory. See [this section](#defining-functions-to-use-file-system-backed-memory) in appendix for more details.
 
 ### Queries take longer so make sure extra services are worth it
 
@@ -158,9 +164,9 @@ As well as testing storing our rdb data in Optane we also tried moving the table
 
 ### Read versus write
 
-The general consensus was that PMEM reads are much closer to DRAM performance that writes however we ran into more issues with the reads when quering the rdb than writing the data. We believe this is because out typical market data system will be writting small inserts to the optane mounts on each upd where as queries can attempt to read the entire data that is stored there. .e.g `exec max time from quote`. This is no different to how kdb behaves with DRAM it is just more noticeable as queries are slightly slower.
+The general consensus was that PMEM reads are much closer to DRAM performance that writes however we ran into more issues with the reads when querying the rdb than writing the data. We believe this is because out typical market data system will be writing small inserts to the optane mounts on each update where as queries can attempt to read the entire data that is stored there. .e.g `exec max time from quote`. This is no different to how kdb behaves with DRAM it is just more noticeable as queries are slightly slower.
 
-### Middle ground 
+### Middle ground
 
 ### Steps for further investigation or post could involve
 
@@ -188,6 +194,7 @@ The general consensus was that PMEM reads are much closer to DRAM performance th
 ## Appendix
 
 ### KDB 4.0 Release notes regarding Filesystem backed memory
+
 ```q
 2019.10.22
 NUC
@@ -360,12 +367,11 @@ The Monitor process connects to the rdb and collect performance stats on a timer
 On start up this process also kicks off the feed once having successfully connected to rdb to start testing run.
 Once endTime has been reached the stats collected are aggregated and written to csv file. Again link for full code available [here](../src/q/monitorPerf.q)
 
-### Defining functions to use file system backed memory 
-(Is this moving off topic for this report?)
+### Defining functions to use file system backed memory
 
-We also need to be aware that it is not just data stored in tables that uses memory. Querys and functions that we run also need to assign memory and which domain they use will depend on how the function was defined.
+We also need to be aware that it is not just data stored in tables that uses memory. Queries and functions that we run also need to assign memory and which domain they use will depend on how the function was defined.
 
-Here for example we compare the same functionality defind in both the root and .m namespace.
+Here for example we compare the same functionality defined in both the root and .m namespace.
 
 ```q
 q)n:1000000
@@ -382,10 +388,10 @@ q)f[tab]~.m.f[tab]
 1b
 ```
 
-A full copy of the data is required for the sort listed above. When running the function defined in the .m namespace, that copy is assigned to the filesystem backed memory. While this results in a drop off in performance, it does provide a huge saving of DRAM memory. This could be very useful in instances where users need to run multiple concurrent backloaders or are struggling to perform end of day sorts with all the data in memory.
+A full copy of the data is required for the sort listed above. When running the function defined in the .m namespace, that copy is assigned to the filesystem backed memory. While this results in a drop off in performance, it does provide a huge saving of DRAM memory. This could be very useful in instances where users need to run multiple concurrent back-loaders or are struggling to perform end of day sorts with all the data in memory.
 
 We did explore this functionality and some utility functions are available in mutil.q script to redefine functions and namespaces to allocate memory to file system back memory instead of DRAM but exploring uses of this further was deemed to be out of scope for this post.
 
-We do however have to be aware of it as if we arent defining code in the .m namespace then we will be constrained to the amount of DRAM we have. If we have more memory stored in appDirect that there is DRAM available and have queries that copies a lot of the data we could run out of DRAM.
+We do however have to be aware of it as if we aren't defining code in the .m namespace then we will be constrained to the amount of DRAM we have. If we have more memory stored in appDirect that there is DRAM available and have queries that copies a lot of the data we could run out of DRAM.
 
 So if leaving an existing api/query code as is there will be an initial over head for pulling the data from appDirect instead of dram. After that once we cause kdb to assign data to new memory space it will get assigned in dram and everything from that point on should be as fast as it was in a dram rdb.
