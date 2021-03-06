@@ -87,9 +87,9 @@ A more detailed description of the [architecture](#arcitecture) can be found in 
 
 ## Findings
 
-### Rdbs can run using significantly less memory
+### Test 1 
 
-Run 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. Figures are comparing single rdb servie in dram versus single service 
+Comparing 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. Figures are comparing single rdb servie in dram versus single service 
 
 |               			   | Monitor Timer | Tp Timer |  DRAM         | AppDirect   | Comparison* |
 | :----------------------|--------------:|-:|--------------:| -----------:| ----------: |
@@ -115,12 +115,10 @@ Run 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. Figure
 
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
 
-We can see here there is a small trade off for latency and query performance but a massive saving in memory usage.
-When we increase the frequency with which we query the process we see that the fact that the query time takes longer means when tables are stored in appDirect means we can service less queries and can impact latency as rdb falls behind processing updates. 
-However as we increase the frequency further to everyu 0.2 seconds we see that this is also true for the regular dram rdb as its latency starts to build.
-This kind of impact depends on the system its being applied to. We see that when we increaset the tp timer to every second and are doing bigger bulk inserts then we can handle the higher query rate in appDirect. The Max latency goes up to a second which is expected because of tp timer.
+Max latency is slightly larger in AppDirect rdbs. As we increase frequecy with which we query rdb appDirect starts to struggle with latency more than dram.
+When using a larger tp frequency of 1 second. The appDirect rdb is able to main similar latency to rdb and service same number of queries.
 
-### We can run many more appDirect rdbs on a single server than dram rdbs
+### Test 2
 
 Comparsion of 2 Dram rdbs running compared to 10 AppDirect Rdbs. Run with 1 second tp timer.
 
@@ -131,27 +129,44 @@ Comparsion of 2 Dram rdbs running compared to 10 AppDirect Rdbs. Run with 1 seco
 | Average Query Time           | 00:00.046716868 | 00:00.067810036   | 0.6889374   |
 | Total Queries per minute     | 2000            | 10000             | 5           | 
 
-We are able to run x5 more rdb services on the exact same hardware just with the addition of optane mounts (Mounts were 85% full at the end testing period). While only using less thn 3% of the memory of the box. Increasing our abilty to services 5x the volume of queries being run on the rdbs. 
+*Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
+
+Latency of two systems is comparable. % memorary usage is much smaller for 10 appDirect rdbs than 2 DRAM rdbs. Average query time is slightly slower in appDirect but can runs more total queries because of extra services. 
 
 ## Discussion
 
+### Test 1 - Optane rdbs can run using significantly less memory with correct settings
 
+We can see here there is a small trade off for latency and query performance but a massive saving in memory usage.
+When we increase the frequency with which we query the process we see that the fact that the query time takes longer means when tables are stored in appDirect means we can service less queries and can impact latency as rdb falls behind processing updates. 
+However as we increase the frequency further to every 0.2 seconds we see that this is also true for the regular dram rdb as its latency starts to build.
+
+This kind of impact depends on the system its being applied to. We see that when we increaset the tp timer to every second and are doing bigger bulk inserts then we can handle the higher query rate in appDirect. The Max latency goes up to a second which is expected because of tp timer.
+
+### Test 2 - We can run many more appDirect rdbs on a single server than dram rdbs
+
+We are able to run x5 more rdb services on the exact same hardware just with the addition of optane mounts (Mounts were 85% full at the end testing period). While only using less thn 3% of the memory of the box. Increasing our abilty to services 5x the volume of queries being run on the rdbs. 
 We do however have to be wary of trying to access too much of the data in optane at the same time. Similar to how it standard set up we need to ensure we have enough memory to do calculations. 
-
-### File system backed memory seems to be better suited to less volatile data storage
-
-As well as testing storing our rdb data in Optane we also tried moving the table in the aggEngine into Optane. We found that the aggEngine then started to struggle to keep up and we saw latency grow. Most likely we believe this is due to the nature of the aggEngine code constantly reading from and writing to its cache of data these constant look up and re writing of data does not be the optimal use case for the technology and doesn't even give us a big memory saving benefit.
 
 ### Queries take longer so make sure extra services are worth it
 
 Further exploration into the query performance of the Optane rdbs should be looked at. could be 2-5x slower for raw pulling from dram compared to PMEM but seeing how this would actually affect a api and if this slow down is completely offset by ability to run more rdbs.
 
+### File system backed memory seems to be better suited to less volatile data storage
+
+As well as testing storing our rdb data in Optane we also tried moving the table in the aggEngine into Optane. We found that the aggEngine then started to struggle to keep up and we saw latency grow. Most likely we believe this is due to the nature of the aggEngine code constantly reading from and writing to its cache of data these constant look up and re writing of data does not be the optimal use case for the technology and doesn't even give us a big memory saving benefit.
+
 ### Read versus write
 
-The general consensus was that PMEM reads are super fast and closer to DRAM that writes
-but we seemed to run into issues with the reads more than writing the data.
-This is possibly because generally kdb will write small amounts of data throughout the the PMEM.
-But queries can attempt to access all the data in PMEM. .e.g `exec max time from quote`
+The general consensus was that PMEM reads are much closer to DRAM performance that writes however we ran into more issues with the reads when quering the rdb than writing the data. We believe this is because out typical market data system will be writting small inserts to the optane mounts on each upd where as queries can attempt to read the entire data that is stored there. .e.g `exec max time from quote`. This is no different to how kdb behaves with DRAM it is just more noticeable as queries are slightly slower.
+
+### Middle ground 
+
+### Steps for further investigation or post could involve
+
+- enhancing query testing, have load balancer in-front of rdbs and compare replacing 1 dram rdb with 3 Optane rdbs. Ensure latency not an issue due to write contention and confirm that query impact not affect slow down mitigated by extra services available to run them.
+- using Optane for large static tables that take up a lot of room in memory but are queried so often take to long to have written to disk. .e.d flat-file table you load into hdbs or reference data tables saved in gateways
+- replay performance - we have seen write contention so be interesting to explore how replay would work for PMEM rdbs. This would probably stress test the write performance to the PMEM mounts. May need to batch updates and and write to dram as intermediary
 
 ## Conclusion
 
@@ -161,16 +176,8 @@ But queries can attempt to access all the data in PMEM. .e.g `exec max time from
 - If a rdb is already seeing very high query volumes may not be advisable to move everything to Optane memory.
 - More realistic use case is if you have columns that are seldom queried that subset of columns could be moved to .m namespace freeing up ram for more rdbs.
 - Not only is same amount of memory cheaper in optane compared to DRAM but the max size optane chips is significantly larger than for DRAM. Meaning the memory limit of single server is significantly increased.  
-
-While it isn't primarily marketed as a DRAM replacement technology, we found it was a very helpful addition in augmenting the volatile memory capacity of a server hosting realtime data.
-
-Reduce cost of infrastructure running with less servers and DRAM to support data processing and analytic workloads
-
-### Steps for further investigation or post could involve
-
-- enhancing query testing, have load balancer in-front of rdbs and compare replacing 1 dram rdb with 3 Optane rdbs. Ensure latency not an issue due to write contention and confirm that query impact not affect slow down mitigated by extra services available to run them.
-- using Optane for large static tables that take up a lot of room in memory but are queried so often take to long to have written to disk. .e.d flat-file table you load into hdbs or reference data tables saved in gateways
-- replay performance - we have seen write contention so be interesting to explore how replay would work for PMEM rdbs. This would probably stress test the write performance to the PMEM mounts. May need to batch updates and and write to dram as intermediary
+- While it isn't primarily marketed as a DRAM replacement technology, we found it was a very helpful addition in augmenting the volatile memory capacity of a server hosting realtime data.
+- Reduce cost of infrastructure running with less servers and DRAM to support data processing and analytic workloads
 
 ## About the authors
 
