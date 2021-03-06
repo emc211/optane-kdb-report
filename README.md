@@ -87,15 +87,25 @@ A more detailed description of the [architecture](#arcitecture) can be found in 
 
 ## Findings
 
-### Apples to Apples
-Run 2 dram rdbs versus 2 appDirect rdbs. This seems to run fine until up the query rate then strangely aggEngine falling behind but not trade / quote.
-Make time of monitor env variable and have as input and record
+### Rdbs can run using significantly less memory
+Run 2 dram rdbs versus 2 appDirect rdbs.
 
 ```bash 
 #from bin directory
 source testing.env
 sh runConcurrentMemoryTypesTesting.sh
 ```
+Results are for 50 millisecond tp timer. Monitor query running every 300 milliseconds. 
+
+|               			   | DRAM         | AppDirect   | Comparison* |
+| :----------------------|-------------:| -----------:| ----------: |
+| Max Latency            | 0.036520548  | 0.059900059 |      0.6097 |
+| Bytes in Memory        | 171893717664 | 5765504     |       29814 |
+| Average Query Time (s) | 0.047099680  | 0.067810036 |      0.6946 |
+
+*Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
+
+We can see here there is a small trade off for latency and query performance but a massive saving in memory usage.
 
 ### On a server that maxed out with 2 DRAM rdbs we could run 10 appDirect rdbs
 
