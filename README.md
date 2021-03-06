@@ -6,7 +6,7 @@
 
 - Wrote a test suite to examine the latency of a typical real time kdb market data system bench marked against one of the busiest day for US equities in 2020
 - Wrote tools to easily configure the splitting of real time data between dram and filesystem backed memory
-- Compared the performance of DRAM vs Optane Memory
+- Compared the performance of storing table in DRAM vs Optane Memory via appDirect.
 - Found that Optane is a viable solution to augment the realtime capacity of a kdb system and allows better utilisation of existing hardware where DRAM was previously a limiting factor
 
 ## Table of Contents
@@ -88,33 +88,55 @@ A more detailed description of the [architecture](#arcitecture) can be found in 
 ## Findings
 
 ### Rdbs can run using significantly less memory
-Run 2 dram rdbs versus 2 appDirect rdbs.
 
-```bash 
-#from bin directory
-source testing.env
-sh runConcurrentMemoryTypesTesting.sh
-```
-Results are for 50 millisecond tp timer. Monitor query running every 300 milliseconds. 
+Run 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. Figures are comparing single rdb servie in dram versus single service 
 
-|               			   | DRAM         | AppDirect   | Comparison* |
-| :----------------------|-------------:| -----------:| ----------: |
-| Max Latency            | 0.036520548  | 0.059900059 |      0.6097 |
-| Bytes in Memory        | 171893717664 | 5765504     |       29814 |
-| Average Query Time (s) | 0.047099680  | 0.067810036 |      0.6946 |
+|               			   | Monitor Timer | Tp Timer |  DRAM         | AppDirect   | Comparison* |
+| :----------------------|--------------:|-:|--------------:| -----------:| ----------: |
+| Max Latency            | 300 |50| 00:00.036520548   | 00:00.059900059    | 0.6097 |
+| Bytes in Memory        | 300 |50| 171893717664      | 5765504            | 29814  |
+| Average Query Time     | 300 |50| 00:00.047099680   | 00:00.067810036    | 0.6946 |
+| Queries per minute     | 300 |50| 200               | 200                | 1      | 
+||||||
+| Max Latency            | 50  |50| 00:00.125182124   | 04:45.203363517    | 7.320505e-06 |
+| Bytes in Memory        | 50  |50| 171893717648      | 5765488            | 29814        |
+| Average Query Time     | 50  |50| 00:00.050620035   | 00:00.069780700    | 0.725416     |
+| Queries per minute     | 50  |50| 880               | 600                | 0.6818182    |
+||||||
+| Max Latency            | 20  |50| 01:17.585672136   | 14:29.525561499    | 0.08861793 |
+| Bytes in Memory        | 20  |50| 171888597648      | 5765488            | 29813     |
+| Average Query Time     | 20  |50| 00:00.050031983   | 00:00.070396229    | 0.7107196 |
+| Queries per minute     | 20  |50| 1000              | 700                | 0.7       |
+||||||
+| Max Latency            | 50  |1000| 00:01.054148932 | 00:01.037875019    | 0.984562  |
+| Bytes in Memory        | 50  |1000| 171893717392    | 5765488            | 29814.25  |
+| Average Query Time     | 50  |1000| 00:00.047581782 | 00:00.067816369    | 0.7016268 |
+| Queries per minute     | 50  |1000| 1000            | 1000               | 1         |
 
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
 
 We can see here there is a small trade off for latency and query performance but a massive saving in memory usage.
+When we increase the frequency with which we query the process we see that the fact that the query time takes longer means when tables are stored in appDirect means we can service less queries and can impact latency as rdb falls behind processing updates. 
+However as we increase the frequency further to everyu 0.2 seconds we see that this is also true for the regular dram rdb as its latency starts to build.
+This kind of impact depends on the system its being applied to. We see that when we increaset the tp timer to every second and are doing bigger bulk inserts then we can handle the higher query rate in appDirect. The Max latency goes up to a second which is expected because of tp timer.
 
-### On a server that maxed out with 2 DRAM rdbs we could run 10 appDirect rdbs
+### We can run many more appDirect rdbs on a single server than dram rdbs
 
-we have mainly explored the capabilities of the standard tick systems abilities to keep latency low and process data while using PMEM instead of DRAM. And expanding the capabilities of an existing server. We can run 10 Optane rdbs at same time. And have very low memory usage. However you need to design to ensure you don't try to pull all the memory into dram during queries.
+Comparsion of 2 Dram rdbs running compared to 10 AppDirect Rdbs. Run with 1 second tp timer.
 
-DEMONSTRATE
+|               			         | 2 DRAM Rdbs     | 10 AppDirect Rdbs | Comparison* |
+| :----------------------------|----------------:|------------------:| -----------:| 
+| Max Latency                  | 00:01.042379141 | 00:01.040085588   | 1.000038    |
+| % Mem of Dram used on server | 63.2989         | 2.25653           | 28.05143    |
+| Average Query Time           | 00:00.046716868 | 00:00.067810036   | 0.6889374   |
+| Total Queries per minute     | 2000            | 10000             | 5           | 
 
-- do we need to?
-- show top of server ?
+We are able to run x5 more rdb services on the exact same hardware just with the addition of optane mounts (Mounts were 85% full at the end testing period). While only using less thn 3% of the memory of the box. Increasing our abilty to services 5x the volume of queries being run on the rdbs. 
+
+## Discussion
+
+
+We do however have to be wary of trying to access too much of the data in optane at the same time. Similar to how it standard set up we need to ensure we have enough memory to do calculations. 
 
 ### File system backed memory seems to be better suited to less volatile data storage
 
