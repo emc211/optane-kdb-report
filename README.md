@@ -1,48 +1,45 @@
-# Using Intel® Optane™ memory to expand the capacity of a typical realtime kdb market data system
+# Using Intel® Optane™ memory to expand the capacity of a typical realtime kdb market data system <!-- omit in toc -->
 
 [by Eoin Cunning and Nick McDaid](#authors)
 
-## Abstract
+## Abstract <!-- omit in toc -->
 
 - Wrote a test suite to examine the latency of a typical real time kdb market data system bench marked against one of the busiest day for US equities in 2020
 - Wrote tools to easily configure the splitting of real time data between dram and filesystem backed memory
 - Compared the performance of storing table in DRAM vs Optane Memory via appDirect.
-- Found that Optane is a viable solution to augment the realtime capacity of a kdb system and allows better utilisation of existing hardware where DRAM was previously a limiting factor
+- Found that Optane is a viable solution to augment the realtime capacity of a kdb system and allows better utiliation of existing hardware where DRAM was previously a limiting factor
 
-## Table of Contents
+## Table of Contents <!-- omit in toc -->
 
-- [Using Intel® Optane™ memory to expand the capacity of a typical realtime kdb market data system](#using-intel-optane-memory-to-expand-the-capacity-of-a-typical-realtime-kdb-market-data-system)
-  - [Abstract](#abstract)
-  - [Table of Contents](#table-of-contents)
-  - [Background](#background)
-  - [Filesystem backed memory](#filesystem-backed-memory)
-  - [Testing Framework](#testing-framework)
-  - [Findings](#findings)
-    - [Test 1](#test-1)
-    - [Test 2](#test-2)
-  - [Discussion](#discussion)
-    - [Test 1 - Optane rdbs can run using significantly less memory with correct settings](#test-1---optane-rdbs-can-run-using-significantly-less-memory-with-correct-settings)
-    - [Test 2 - We can run many more appDirect rdbs on a single server than dram rdbs](#test-2---we-can-run-many-more-appdirect-rdbs-on-a-single-server-than-dram-rdbs)
-    - [Queries take longer so make sure extra services are worth it](#queries-take-longer-so-make-sure-extra-services-are-worth-it)
-    - [File system backed memory seems to be better suited to less volatile data storage](#file-system-backed-memory-seems-to-be-better-suited-to-less-volatile-data-storage)
-    - [Read versus write](#read-versus-write)
-    - [Middle ground](#middle-ground)
-    - [Steps for further investigation or post could involve](#steps-for-further-investigation-or-post-could-involve)
-  - [Conclusion](#conclusion)
-  - [About the authors](#about-the-authors)
-  - [Appendix](#appendix)
-    - [KDB 4.0 Release notes regarding Filesystem backed memory](#kdb-40-release-notes-regarding-filesystem-backed-memory)
-    - [Hardware](#hardware)
-      - [Server details](#server-details)
-      - [Server set up for appDirect](#server-set-up-for-appdirect)
-      - [Numa settings](#numa-settings)
-    - [Testing Framework Architecture](#testing-framework-architecture)
-      - [Feed](#feed)
-      - [Tp](#tp)
-      - [AggEngine](#aggengine)
-      - [Rdb](#rdb)
-      - [Monitor](#monitor)
-    - [Defining functions to use file system backed memory](#defining-functions-to-use-file-system-backed-memory)
+- [Background](#background)
+- [Filesystem backed memory](#filesystem-backed-memory)
+- [Testing Framework](#testing-framework)
+- [Findings](#findings)
+  - [Test 1](#test-1)
+  - [Test 2](#test-2)
+- [Discussion](#discussion)
+  - [Test 1 - Optane rdbs can run using significantly less memory with correct settings](#test-1---optane-rdbs-can-run-using-significantly-less-memory-with-correct-settings)
+  - [Test 2 - We can run many more appDirect rdbs on a single server than dram rdbs](#test-2---we-can-run-many-more-appdirect-rdbs-on-a-single-server-than-dram-rdbs)
+  - [Queries take longer so make sure extra services are worth it](#queries-take-longer-so-make-sure-extra-services-are-worth-it)
+  - [File system backed memory seems to be better suited to less volatile data storage](#file-system-backed-memory-seems-to-be-better-suited-to-less-volatile-data-storage)
+  - [Read versus write](#read-versus-write)
+  - [Middle ground](#middle-ground)
+  - [Steps for further investigation or post could involve](#steps-for-further-investigation-or-post-could-involve)
+- [Conclusion](#conclusion)
+- [About the authors](#about-the-authors)
+- [Appendix](#appendix)
+  - [KDB 4.0 Release notes regarding Filesystem backed memory](#kdb-40-release-notes-regarding-filesystem-backed-memory)
+  - [Hardware](#hardware)
+    - [Server details](#server-details)
+    - [Server set up for appDirect](#server-set-up-for-appdirect)
+    - [Numa settings](#numa-settings)
+  - [Testing Framework Architecture](#testing-framework-architecture)
+    - [Feed](#feed)
+    - [Tp](#tp)
+    - [AggEngine](#aggengine)
+    - [Rdb](#rdb)
+    - [Monitor](#monitor)
+  - [Defining functions to use file system backed memory](#defining-functions-to-use-file-system-backed-memory)
 
 ## Background
 
@@ -52,7 +49,7 @@ It is assumed the reader already has some knowledge of kdb, Optane persistent me
 
 ## Filesystem backed memory
 
-Filesystem backed memory is available in kdb by use of the [-m command line option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and the [.m namespace](https://code.kx.com/q/ref/dotm/). To move a table or some columns into filesystem backed memory,such as Optane, you simply define them in the .m namespace without any other codes changes required. This can be accomplished by using the following two functions from the [mutil.q](../src/q/mutil.q) script. 
+Filesystem backed memory is available in kdb by use of the [-m command line option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and the [.m namespace](https://code.kx.com/q/ref/dotm/). To move a table or some columns into filesystem backed memory,such as Optane, you simply define them in the .m namespace without any other codes changes required. This can be accomplished by using the following two functions from the [mutil.q](../src/q/mutil.q) script.
 
 ```q
 .mutil.colsToDotM:{[t;cs] // ex .mutil.colsToDotM[`trade;`price`size]
@@ -73,7 +70,7 @@ The only difference between running a DRAM and Optane rdb is starting it with -m
 .mutil.tblToDotM each tables[];
 ```
 
-Using .mutil.colsToDotM rather than .mutil.tblToDotM allows users to move a subset of columns into Optane, giving a hybrid model which allow users to keep their most accessed data in DRAM and less frequently accessed columns in Optane. 
+Using .mutil.colsToDotM rather than .mutil.tblToDotM allows users to move a subset of columns into Optane, giving a hybrid model which allow users to keep their most accessed data in DRAM and less frequently accessed columns in Optane.
 
 ## Testing Framework
 
@@ -94,7 +91,7 @@ A more detailed description of the [architecture](#arcitecture) can be found in 
 
 ### Test 1
 
-Comparing 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. Figures are comparing single rdb service in dram versus single service 
+Comparing 2 dram rdbs versus 2 appDirect rdbs were run at all at the same time. Figures are comparing single rdb service in dram versus single service.
 
 |                        | Monitor Timer | Tp Timer |  DRAM         | AppDirect   | Comparison* |
 | :----------------------|--------------:|-:|--------------:| -----------:| ----------: |
@@ -143,7 +140,7 @@ Latency of two systems is comparable. % memory usage is much smaller for 10 appD
 ### Test 1 - Optane rdbs can run using significantly less memory with correct settings
 
 We can see here there is a small trade off for latency and query performance but a massive saving in memory usage.
-When we increase the frequency with which we query the process we see that the fact that the query time takes longer means when tables are stored in appDirect means we can service less queries and can impact latency as rdb falls behind processing updates. 
+When we increase the frequency with which we query the process we see that the fact that the query time takes longer means when tables are stored in appDirect means we can service less queries and can impact latency as rdb falls behind processing updates.
 However as we increase the frequency further to every 0.2 seconds we see that this is also true for the regular dram rdb as its latency starts to build.
 
 This kind of impact depends on the system its being applied to. We see that when we increased the tp timer to every second and are doing bigger bulk inserts then we can handle the higher query rate in appDirect. The Max latency goes up to a second which is expected because of tp timer.
@@ -151,7 +148,7 @@ This kind of impact depends on the system its being applied to. We see that when
 ### Test 2 - We can run many more appDirect rdbs on a single server than dram rdbs
 
 We are able to run x5 more rdb services on the exact same hardware just with the addition of optane mounts (Mounts were 85% full at the end testing period). While only using less than 3% of the memory of the box. Increasing our ability to services 5x the volume of queries being run on the rdbs.
-We do however have to be wary of trying to access too much of the data in optane at the same time. Similar to how it standard set up we need to ensure we have enough memory to do calculations. 
+We do however have to be wary of trying to access too much of the data in optane at the same time. Similar to how it standard set up we need to ensure we have enough memory to do calculations.
 If we need code to access more memory than is available this can also use appDirect memory. See [this section](#defining-functions-to-use-file-system-backed-memory) in appendix for more details.
 
 ### Queries take longer so make sure extra services are worth it
