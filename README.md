@@ -1,5 +1,8 @@
 # Using Intel® Optane™ memory to expand the capacity of a typical realtime kdb market data system <!-- omit in toc -->
 
+
+TODO - Check results in testcase 1 - no queries per minute doesn't look right. 50ms query freq should give 1200 queries per min
+
 [by Eoin Cunning and Nick McDaid](#authors)
 
 ## Abstract <!-- omit in toc -->
@@ -153,7 +156,7 @@ Monitor query frequency: 20ms
 | Queries per minute     |  1000              | 700                | 0.7       |
 
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
-<TODO DO WE WANT TO KEEP COMPARISON FACTOR - SOUNDS A BIT LIKE 'CAVEMAN LIKE BIG'>
+
 
 #### Analysis
 
@@ -168,62 +171,41 @@ The trade off in latency and max queries per minute is the compromise for a mass
 
 ### Test Case 2
 #### Test Case:
-DRAM will excel when compared like for like with Optane, however Optane is better suited to horizontal scaling. A typical Optane server could host up to 10 Optane RDBs vs 2 Standard RDBs on a typical DRAM only server. Compare two DRAM RDBs running compared to 10 Optane  RDBs. Run with one second TP timer.
+DRAM will excel when compared like for like with Optane, however Optane is better suited to horizontal scaling. A typical Optane server could host up to 10 Optane RDBs vs 2 Standard RDBs on a typical DRAM only server. Compare two DRAM RDBs with 10 Optane  RDBs, query frequency of 50ms and TP publish frequency of 1000ms and sum max number of queries achievable across all DRAM and Optane instances to attempt to model performance achievable with a perfect load balancer.
 
 #### Results
-Tickerplant publish frequency 1000ms
-
-Monitor query frequency: 50ms
-
 |                                 | 2 DRAM RDBs     | 10 Optane RDBs | Comparison* |
 | :-------------------------------|----------------:|------------------:| -----------:|
-| Max Latency                     | 00:01.042379141 | 00:01.040085588   | 1.000038    |
+| Max Latency                     | 0D00:00:01.042379141 |  0D00:00:01.07085588   | 0.9734075    |
 | % Memory of DRAM used on server | 63.2989         | 2.25653           | 28.05143    |
-| Average Query Time              | 00:00.046716868 | 00:00.067810036   | 0.6889374   |
+| Average Query Time              |  0D00:00:00.046716868 |  0D00:00:00.067810036   | 0.6889374   |
 | Max queries per minute          | 2314            | 7735              | 3.432697    |
 
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
 
-Latency of two systems is comparable. % memory usage is much smaller for 10 appDirect RDBs than 2 DRAM RDBs. Average query time is slightly slower in appDirect but can runs more total queries because of extra services.
+#### Analysis
+- Max latency of two systems is comparable.
+- Percentage memory usage is much neglible for 10 Optane RDBs vs the 2 DRAM RDBs
+- Average query time is slower in Optane but due to extra RDB services being available, the total queries per minute possible is increased. 
+
+### Conclusion
+
+From this analysis, Optane is a viable option to help augment the DRAM capacity of a realtime market data system with minimal code changes required, with the caveat that performance difference will vary depending on the type of queries the user is running. Queries which have small reads and then large computes will have less noticable impact running on Optane vs queries which need to read full vectors of data such as 'select max price by sym from table'. In side testing, it was observed operations such as these could be 3-5x slower than DRAM.
+
+A simple load balancer may result in inconsistent query times for users, however many kdb IPC frameworks now have the ability to add different queries to different priority queues depending on query / user characteritics. In these instances, routing high prioirty traffic to DRAM RDBs and less time critical queries to Optane RDBs would be a great way to use the additional capacity.
+
+It is worth noting that Optane performance wont scale lineraly. The 10 Optane RDBs were spread across two cards. From discussions with the team at Intel, they expect each card should support upto five concurrent reads or writes before IO contention becomes an issue. The testing which was carried out with NUMA / taskset settings configured to ensure each RDB was locked to the optimal cards and CPU. More details of which are available in the appendix. 
+
+A great use of Optane could be moving less frequently used columns out of DRAM and into Optane using a util such as .mutil.colsToDotM . Many systems have a number of timestamps which are only ever used to foresniscally examine a production issue such as misaligned / late data. Many users drop these columns from the RDB insert and need to replay the TP log to access them during a production issue. Keeping them in Optane would allow instant access during given issues.
+
+Regarding costs, while Optane is cheaper than DRAM, it is worth noting that older servers won't support it. Therefore it is not a magic bullet for older struggling systems as a newer server will also be required. Severs with 48+ CPU's that are currently using 70/80% of their DRAM but maybe only 30/40% of their CPU could also see better CPU utilisation of their existing hardware with Optane as they can host more data to crunch on a single server rather than having to buy a second one and only use 30/40% of CPU there also
+
+At the time of writing it is also not available on any of the major cloud providers. But it's due to be on the 2021 road map for a number of providers.
 
 
+Ideals for future testing:
+- Useing Optane to load reference data into processes. At present there are use cases where users call out to a reference data service to map securities, corporate actions etc. These data sets can be tens of GB's of data. While it is not practical to hold this data in DRAM in many processes, Optane could present an oppourtunity to load this data into the .m namespace of the RDB, offering faster lookups without consuming large amounts of DRAM.
 
-### Test 2 - We can run many more appDirect RDBs on a single server than DRAM RDBs
-
-We are able to run x5 more RDB services on the exact same hardware just with the addition of optane mounts (Mounts were 85% full at the end testing period). While only using less than 3% of the memory of the box. Increasing our ability to services 5x the volume of queries being run on the RDB.
-We do however have to be wary of trying to access too much of the data in optane at the same time. Similar to how it standard set up we need to ensure we have enough memory to do calculations.
-If we need code to access more memory than is available this can also use appDirect memory. See [this section](#defining-functions-to-use-file-system-backed-memory) in appendix for more details.
-
-### Queries take longer so make sure extra services are worth it
-
-Further exploration into the query performance of the Optane RDBs should be looked at. could be 2-5x slower for raw pulling from DRAM compared to PMEM but seeing how this would actually affect a api and if this slow down is completely offset by ability to run more RDBs.
-
-### File system backed memory seems to be better suited to less volatile data storage
-
-As well as testing storing our RDB data in Optane we also tried moving the table in the aggEngine into Optane. We found that the aggEngine then started to struggle to keep up and we saw latency grow. Most likely we believe this is due to the nature of the aggEngine code constantly reading from and writing to its cache of data these constant look up and re writing of data does not be the optimal use case for the technology and doesn't even give us a big memory saving benefit.
-
-### Read versus write
-
-The general consensus was that PMEM reads are much closer to DRAM performance that writes however we ran into more issues with the reads when querying the RDB than writing the data. We believe this is because out typical market data system will be writing small inserts to the optane mounts on each update where as queries can attempt to read the entire data that is stored there. .e.g `exec max time from quote`. This is no different to how kdb behaves with DRAM it is just more noticeable as queries are slightly slower.
-
-### Middle ground
-
-### Steps for further investigation or post could involve
-
-- enhancing query testing, have load balancer in-front of RDBs and compare replacing 1 DRAM RDB with 3 Optane RDBs. Ensure latency not an issue due to write contention and confirm that query impact not affect slow down mitigated by extra services available to run them.
-- using Optane for large static tables that take up a lot of room in memory but are queried so often take to long to have written to disk. .e.d flat-file table you load into hdbs or reference data tables saved in gateways
-- replay performance - we have seen write contention so be interesting to explore how replay would work for PMEM RDBs. This would probably stress test the write performance to the PMEM mounts. May need to batch updates and and write to DRAM as intermediary
-
-## Conclusion
-
-- It is possible to run RDBs with data stored in Optane instead of DRAM. Code required for such changes is outlined.
-- There is a trade off in performance for querying from file system backed memory. Can be seen to be 2-5x slower for raw data pull. But as you move to more aggregated cpu bound type queries this can become almost negligible.
-- Possible that just trying to convert a working RDB to Optane. This slow down in read speed will cause queries to take longer and could result in RDB delaying processing of of new messages for tp.
-- If a RDB is already seeing very high query volumes may not be advisable to move everything to Optane memory.
-- More realistic use case is if you have columns that are seldom queried that subset of columns could be moved to .m namespace freeing up ram for more RDBs.
-- Not only is same amount of memory cheaper in optane compared to DRAM but the max size optane chips is significantly larger than for DRAM. Meaning the memory limit of single server is significantly increased.  
-- While it isn't primarily marketed as a DRAM replacement technology, we found it was a very helpful addition in augmenting the volatile memory capacity of a server hosting realtime data.
-- Reduce cost of infrastructure running with less servers and DRAM to support data processing and analytic workloads
 
 ## About the authors
 
