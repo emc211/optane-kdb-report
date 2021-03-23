@@ -1,6 +1,5 @@
 # Using Intel® Optane™ memory to expand the capacity of a typical realtime kdb market data system <!-- omit in toc -->
 
-
 TODO - Check results in testcase 1 - no queries per minute doesn't look right. 50ms query freq should give 1200 queries per min
 
 [by Eoin Cunning and Nick McDaid](#authors)
@@ -9,55 +8,42 @@ TODO - Check results in testcase 1 - no queries per minute doesn't look right. 5
 
 - Wrote a testing framework to simulate a realtime kdb market data system and measure latency within the system.
 - Benchmarked DRAM vs Optane memory when processing US equity data for one of the busiest days in 2020
-- Wrote utility script to easily move in-memory datadata between DRAM and Optane memory
+- Wrote utility script to easily move in-memory data between DRAM and Optane memory
 - Found that:
-  - Optane is a viable solution to augment the realtime capacity of a kdb system 
+  - Optane is a viable solution to augment the realtime capacity of a kdb system
   - Optane allows better utiliation of existing hardware where DRAM was previously a limiting factor
 
 ## Table of Contents <!-- omit in toc -->
 
 - [Background](#background)
-- [Filesystem backed memory](#KDB-Utility-Functions-for-Optane-Memory)
+- [KDB Utility Functions for Optane Memory](#kdb-utility-functions-for-optane-memory)
 - [Testing Framework](#testing-framework)
-- [Findings](#findings)
-  - [Test 1](#test-1)
-  - [Test 2](#test-2)
-- [Discussion](#discussion)
-  - [Test 1 - Optane RDBs can run using significantly less memory with correct settings](#test-1---optane-rdbs-can-run-using-significantly-less-memory-with-correct-settings)
-  - [Test 2 - We can run many more appDirect RDBs on a single server than DRAM RDBs](#test-2---we-can-run-many-more-appdirect-rdbs-on-a-single-server-than-DRAM-rdbs)
-  - [Queries take longer so make sure extra services are worth it](#queries-take-longer-so-make-sure-extra-services-are-worth-it)
-  - [File system backed memory seems to be better suited to less volatile data storage](#file-system-backed-memory-seems-to-be-better-suited-to-less-volatile-data-storage)
-  - [Read versus write](#read-versus-write)
-  - [Middle ground](#middle-ground)
-  - [Steps for further investigation or post could involve](#steps-for-further-investigation-or-post-could-involve)
-- [Conclusion](#conclusion)
+- [Test Cases and Results](#test-cases-and-results)
+  - [Test Case 1](#test-case-1)
+    - [Test Case:](#test-case)
+    - [Results](#results)
+    - [Analysis](#analysis)
+  - [Test Case 2](#test-case-2)
+    - [Test Case:](#test-case-1)
+    - [Results](#results-1)
+    - [Analysis](#analysis-1)
+  - [Conclusion](#conclusion)
 - [About the authors](#about-the-authors)
 - [Appendix](#appendix)
-  - [KDB 4.0 Release notes regarding Filesystem backed memory](#kdb-40-release-notes-regarding-filesystem-backed-memory)
-  - [Hardware](#hardware)
-    - [Server details](#server-details)
-    - [Server set up for appDirect](#server-set-up-for-appdirect)
-    - [Numa settings](#numa-settings)
-  - [Testing Framework Architecture](#testing-framework-architecture)
-    - [Feed](#feed)
-    - [Tp](#tp)
-    - [AggEngine](#aggengine)
-    - [RDB](#RDB)
-    - [Monitor](#monitor)
-  - [Defining functions to use file system backed memory](#defining-functions-to-use-file-system-backed-memory)
 
 ## Background
 
-While there has been research [published](https://kx.com/blog/overcoming-the-memory-challenge-with-optane) in the kdb community showing the effectiveness of Optane as an extremely fast disk, there as yet, has been no published research using Optane as a volatile memory source. 
+While there has been research [published](https://kx.com/blog/overcoming-the-memory-challenge-with-optane) in the kdb community showing the effectiveness of Optane as an extremely fast disk, there as yet, has been no published research using Optane as a volatile memory source.
 
 Traditionally the choke point of a market data platform has been the amount of DRAM available on a server, which determines how many RDBs can be run to server queries for todays data.This blog:
+
 - Looks at wether Optane mounted in AppDirect mode can be used to help solve this problem
 - Provides useful utilities to move data in and out of Optane memory
 - Documents the observed performance
 
-It is assumed the reader already has some knowledge of kdb and Optane. This paper contains some details on how to use Optane but a lot more detail is available [here](https://code.kx.com/q/kb/optane) on the Kx wiki. A good tech talk is also available from [AquaQ](https://www.aquaq.co.uk/q/aquaquarantine-kdb-tech-talks-2/#optane). 
+It is assumed the reader already has some knowledge of kdb and Optane. This paper contains some details on how to use Optane but a lot more detail is available [here](https://code.kx.com/q/kb/optane) on the Kx wiki. A good tech talk is also available from [AquaQ](https://www.aquaq.co.uk/q/aquaquarantine-kdb-tech-talks-2/#optane).
 
-This paper was produced in partnership with Intel, so focuses on Optane memory, but the concept is interchangeable wiht other filesystem backed memory sources.
+This paper was produced in partnership with Intel, so focuses on Optane memory, but the concept is interchangeable with other filesystem backed memory sources.
 
 ## KDB Utility Functions for Optane Memory
 
@@ -89,9 +75,9 @@ Using .mutil.colsToDotM rather than .mutil.tblToDotM allows users to move a subs
 
 The framework was designed to mimic a typical kdb market data capture platform and then observe and record system latency. A command line flag would tell the framework if it should start its RDB in DRAM or Optane.  The capture section of the framework is largely base on the standard [tick architecture](https://github.com/KxSystems/kdb-tick)
 
-The framework simulates the volume and velocity of market data processed on March 9th 2020. It prestresses the RDB with 65 million records, and then sends 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio. 
+The framework simulates the volume and velocity of market data processed on March 9th 2020. It prestressed the RDB with 65 million records, and then sends 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio.
 
-A tickerplant (tp) consumed this feed and on a timer distributed the messages to an aggregation engine which stats aggregated to a minute and daily level before publishing them back to the tickerplant. The RDB consumes the raw and aggregated data. On a seperate configurable timer, the monitor process queried the RDB and measures all of the below, considered to be a "typical kdb query":
+A tickerplant (tp) consumed this feed and on a timer distributed the messages to an aggregation engine which stats aggregated to a minute and daily level before publishing them back to the tickerplant. The RDB consumes the raw and aggregated data. On a separate configurable timer, the monitor process queried the RDB and measures all of the below, considered to be a "typical kdb query":
 
 - Max trade / quote latency (time between the tick being generated in the feed process and being accessible via a query to the RDB)
 - Max aggregated trade / quote stats latency (as above - but also including the time for the aggregation engine to perform it's calculations and publish the results)
@@ -99,14 +85,17 @@ A tickerplant (tp) consumed this feed and on a timer distributed the messages to
 - Time taken to get the prevailing quote information for every trade for a single ticker
 - Memory utilisation stats
 
-The above was considered a "stack". The testing consisted of running mutliple stacks with their RDB hosted in either DRAM or Optane and varying the tickerplant publish / query request frequencies to determine the maximum number of the "typical kdb queries" the system could server and the max latency in each setup.
+The above was considered a "stack". The testing consisted of running multiple stacks with their RDB hosted in either DRAM or Optane and varying the tickerplant publish / query request frequencies to determine the maximum number of the "typical kdb queries" the system could server and the max latency in each setup.
 
 A more detailed description of the [architecture](#arcitecture) can be found in the appendix.
 
 ## Test Cases and Results
+
 ### Test Case 1
+
 #### Test Case:
-Run two DRAM RDBs and two Optane RDBs. Volume of data being published is constant but TP and query frequencies are altered to compare latency and check if RDBs can respond to queries at the same rate that they are recieved.
+
+Run two DRAM RDBs and two Optane RDBs. Volume of data being published is constant but TP and query frequencies are altered to compare latency and check if RDBs can respond to queries at the same rate that they are received.
 
 #### Results
 
@@ -157,7 +146,6 @@ Monitor query frequency: 20ms
 
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
 
-
 #### Analysis
 
 - Max latency is as expected, consistently higher in Optane RDBs
@@ -168,12 +156,14 @@ Monitor query frequency: 20ms
 
 The trade off in latency and max queries per minute is the compromise for a massive reduction in memory usage. This is expected though given the IO overhead of Optane vs DRAM.
 
-
 ### Test Case 2
+
 #### Test Case:
+
 DRAM will excel when compared like for like with Optane, however Optane is better suited to horizontal scaling. A typical Optane server could host up to 10 Optane RDBs vs 2 Standard RDBs on a typical DRAM only server. Compare two DRAM RDBs with 10 Optane  RDBs, query frequency of 50ms and TP publish frequency of 1000ms and sum max number of queries achievable across all DRAM and Optane instances to attempt to model performance achievable with a perfect load balancer.
 
 #### Results
+
 |                                 | 2 DRAM RDBs     | 10 Optane RDBs | Comparison* |
 | :-------------------------------|----------------:|------------------:| -----------:|
 | Max Latency                     | 0D00:00:01.042379141 |  0D00:00:01.07085588   | 0.9734075    |
@@ -184,38 +174,38 @@ DRAM will excel when compared like for like with Optane, however Optane is bette
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
 
 #### Analysis
+
 - Max latency of two systems is comparable.
-- Percentage memory usage is much neglible for 10 Optane RDBs vs the 2 DRAM RDBs
-- Average query time is slower in Optane but due to extra RDB services being available, the total queries per minute possible is increased. 
+- Percentage memory usage is much negligible for 10 Optane RDBs vs the 2 DRAM RDBs
+- Average query time is slower in Optane but due to extra RDB services being available, the total queries per minute possible is increased.
 
 ### Conclusion
 
-From this analysis, Optane is a viable option to help augment the DRAM capacity of a realtime market data system with minimal code changes required, with the caveat that performance difference will vary depending on the type of queries the user is running. Queries which have small reads and then large computes will have less noticable impact running on Optane vs queries which need to read full vectors of data such as 'select max price by sym from table'. In side testing, it was observed operations such as these could be 3-5x slower than DRAM.
+From this analysis, Optane is a viable option to help augment the DRAM capacity of a realtime market data system with minimal code changes required, with the caveat that performance difference will vary depending on the type of queries the user is running. Queries which have small reads and then large computes will have less noticeable impact running on Optane vs queries which need to read full vectors of data such as 'select max price by sym from table'. In side testing, it was observed operations such as these could be 3-5x slower than DRAM.
 
-A simple load balancer may result in inconsistent query times for users, however many kdb IPC frameworks now have the ability to add different queries to different priority queues depending on query / user characteritics. In these instances, routing high prioirty traffic to DRAM RDBs and less time critical queries to Optane RDBs would be a great way to use the additional capacity.
+A simple load balancer may result in inconsistent query times for users, however many kdb IPC frameworks now have the ability to add different queries to different priority queues depending on query / user characteristics. In these instances, routing high priority traffic to DRAM RDBs and less time critical queries to Optane RDBs would be a great way to use the additional capacity.
 
-It is worth noting that Optane performance wont scale lineraly. The 10 Optane RDBs were spread across two cards. From discussions with the team at Intel, they expect each card should support upto five concurrent reads or writes before IO contention becomes an issue. The testing which was carried out with NUMA / taskset settings configured to ensure each RDB was locked to the optimal cards and CPU. More details of which are available in the appendix. 
+It is worth noting that Optane performance wont scale linearly. The 10 Optane RDBs were spread across two cards. From discussions with the team at Intel, they expect each card should support up to five concurrent reads or writes before IO contention becomes an issue. The testing which was carried out with NUMA / taskset settings configured to ensure each RDB was locked to the optimal cards and CPU. More details of which are available in the appendix.
 
-A great use of Optane could be moving less frequently used columns out of DRAM and into Optane using a util such as .mutil.colsToDotM . Many systems have a number of timestamps which are only ever used to foresniscally examine a production issue such as misaligned / late data. Many users drop these columns from the RDB insert and need to replay the TP log to access them during a production issue. Keeping them in Optane would allow instant access during given issues.
+A great use of Optane could be moving less frequently used columns out of DRAM and into Optane using a util such as .mutil.colsToDotM . Many systems have a number of timestamps which are only ever used to forensically examine a production issue such as misaligned / late data. Many users drop these columns from the RDB insert and need to replay the TP log to access them during a production issue. Keeping them in Optane would allow instant access during given issues.
 
 Regarding costs, while Optane is cheaper than DRAM, it is worth noting that older servers won't support it. Therefore it is not a magic bullet for older struggling systems as a newer server will also be required. Severs with 48+ CPU's that are currently using 70/80% of their DRAM but maybe only 30/40% of their CPU could also see better CPU utilisation of their existing hardware with Optane as they can host more data to crunch on a single server rather than having to buy a second one and only use 30/40% of CPU there also
 
 At the time of writing it is also not available on any of the major cloud providers. But it's due to be on the 2021 road map for a number of providers.
 
-
 Ideals for future testing:
-- Useing Optane to load reference data into processes. At present there are use cases where users call out to a reference data service to map securities, corporate actions etc. These data sets can be tens of GB's of data. While it is not practical to hold this data in DRAM in many processes, Optane could present an oppourtunity to load this data into the .m namespace of the RDB, offering faster lookups without consuming large amounts of DRAM.
 
+- Using Optane to load reference data into processes. At present there are use cases where users call out to a reference data service to map securities, corporate actions etc. These data sets can be tens of GB's of data. While it is not practical to hold this data in DRAM in many processes, Optane could present an opportunity to load this data into the .m namespace of the RDB, offering faster lookups without consuming large amounts of DRAM.
 
 ## About the authors
 
 [Eoin Cunning](https://www.linkedin.com/in/eoin-cunning-b7195a67) is a kdb consultant, based in London, who has worked on several KX solutions projects and currently works on a market data system for a leading global market maker firm.
 
-[Nick McDaid](https://www.linkedin.com/in/nmcdaid/) is a kdb developer, based in London working for a leading gloabl market making firm.
+[Nick McDaid](https://www.linkedin.com/in/nmcdaid/) is a kdb developer, based in London working for a leading global market making firm.
 
-## Appendix
+## Appendix 
 
-### KDB 4.0 Release notes regarding Filesystem backed memory
+### KDB 4.0 Release notes regarding Filesystem backed memory <!-- omit in toc -->
 
 ```q
 2019.10.22
@@ -241,9 +231,9 @@ c  q)\d .myns
 mapped is a single global counter, same in every thread's \w
 ```
 
-### Hardware
+### Hardware <!-- omit in toc -->
 
-#### Server details
+#### Server details <!-- omit in toc -->
 
 ```bash
 [root@clx4 ~]# lscpu
@@ -330,7 +320,7 @@ tmpfs                 38G     0   38G   0% /run/user/1000
  Physical     | 384.000 GiB | 1517.066 GiB | 1901.066 GiB
 ```
 
-#### Server set up for appDirect
+#### Server set up for appDirect <!-- omit in toc -->
 
 ```bash
 # set all Optane to appDirect either via command below of BIOs settings (required reboot)
@@ -357,39 +347,39 @@ chmod 777 /mnt/pmem0
 chmod 777 /mnt/pmem1
 ```
 
-#### Numa settings
+#### Numa settings <!-- omit in toc -->
 
 The standard [recommendation](https://code.kx.com/q/kb/linux-production/) when using numa is to set --interleave=all ` numactl --interleave=all q ` but found slightly better performance in aligning the numa nodes with the persistent memory namespaces `numactl -N 0 -m 0  q -q -m /mnt/pmem0/` and `numactl -N 1 -m 1  q -q -m /mnt/pmem1/`
 
-### Testing Framework Architecture
+### Testing Framework Architecture <!-- omit in toc -->
 
 ![fig - Architecture of kdb stack](figs/stack.png)
 
-#### Feed
+#### Feed <!-- omit in toc -->
 
 Data arrives from a feed. Normally this would be a feed-handler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which during its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades. Code can be viewed [here](../src/q/feed.q)
 
-#### Tp
+#### Tp <!-- omit in toc -->
 
 Standard kdb tp running in batch mode. Code can be viewed [here](../src/q/tp)
 
-#### AggEngine
+#### AggEngine <!-- omit in toc -->
 
 This process is the main departure for standard tick set up. This process subscribes to standard trade and quote tables and calculates running daily and minute level stacks for all symbols. These aggregated tables are then published to the RDB from which they could then be queried.
 This process was added in order to have some kind of more complex event process as well as standard RDB. This process will constantly have to read and write to memory. where generally only has to write as it appends data and only read for queries) Code can be viewed [here](../src/q/aggEngine.q)
 
-#### RDB
+#### RDB <!-- omit in toc -->
 
 Standard rdb subscribes to tables from the tp. We also added option to prestress the memory before our half hour of testing again looking at the market data on 2020.03.02 there were 650,000,000 quote msgs and 85,000,000 trades at 15:30 so we insert these volumes into the rdb at start up.
 This aims to ensure that the ram is already somewhat saturated. Full code available[here](../src/q/tp)
 
-#### Monitor
+#### Monitor <!-- omit in toc -->
 
 The Monitor process connects to the rdb and collect performance stats on a timer. Main measurements are for latency of quote table this will track if messages getting queued from the tp, quote stats table if this falls behind indicates issue in aggEngine and the query time which measures how long it takes to run some typical rdb queries .e.g aj
 On start up this process also kicks off the feed once having successfully connected to rdb to start testing run.
 Once endTime has been reached the stats collected are aggregated and written to csv file. Again link for full code available [here](../src/q/monitorPerf.q)
 
-### Defining functions to use file system backed memory
+### Defining functions to use file system backed memory <!-- omit in toc -->
 
 We also need to be aware that it is not just data stored in tables that uses memory. Queries and functions that we run also need to assign memory and which domain they use will depend on how the function was defined.
 
