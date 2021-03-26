@@ -1,7 +1,5 @@
 # Using Intel® Optane™ memory to expand the capacity of a typical realtime kdb market data system <!-- omit in toc -->
 
-TODO - Check results in testcase 1 - no queries per minute doesn't look right. 50ms query freq should give 1200 queries per min
-
 [by Eoin Cunning and Nick McDaid](#authors)
 
 ## Abstract <!-- omit in toc -->
@@ -101,48 +99,48 @@ Run two DRAM RDBs and two Optane RDBs. Volume of data being published is constan
 
 Tickerplant publish frequency 50ms
 
-Monitor query frequency: 300ms
+Monitor query frequency: 300ms 
 
 
-|        Stat            |  DRAM         | Optane   | Comparison* |
-| :----------------------|--------------:| -----------:| ----------: |
-| Max Latency            |  0D00:00:00.036520548   | 0D00:00:00.059900059    | 0.6097 |
-| Bytes in Memory        |  171893717664      | 5765504            | 29814  |
-| Average Query Time     |  0D00:00:00.047099680   | 0D00:00:00.067810036    | 0.6946 |
-| Queries per minute     |  200               | 200                | 1      |
+|        Stat            |  DRAM                   | Optane              | Comparison* |
+| :----------------------|------------------------:| -------------------:| -----------:|
+| Max Latency            |  0D00:00:00.036520548   | 0D00:00:00.059900059| 0.6097      |
+| Bytes in Memory        |  171893717664           | 5765504             | 29814       |
+| Average Query Time     |  0D00:00:00.047099680   | 0D00:00:00.067810036| 0.6946      |
+| Queries per minute     |  200                    | 200                 | 1           |
 
 Tickerplant publish frequency 50ms
 
 Monitor query frequency: 50ms
 
-|        Stat            |  DRAM         | Optane   | Comparison* |
-| :----------------------|--------------:| -----------:| ----------: |
-| Max Latency            | 0D00:00:00.125182124   | 0D00:04:45.203363517    | 7.320505e-06 |
-| Bytes in Memory        | 171893717648      | 5765488            | 29814        |
-| Average Query Time     | 0D00:00:00.050620035   | 0D00:00:00.069780700    | 0.725416     |
-| Queries per minute     | 880               | 600                | 0.6818182    |
+|        Stat            |  DRAM               | Optane               | Comparison*  |
+| :----------------------|--------------------:| --------------------:| -----------: |
+| Max Latency            | 0D00:00:00.125182124| 0D00:04:45.203363517 | 7.320505e-06 |
+| Bytes in Memory        | 171893717648        | 5765488              | 29814        |
+| Average Query Time     | 0D00:00:00.050620035| 0D00:00:00.069780700 | 0.725416     |
+| Queries per minute     | 880                 | 600                  | 0.6818182    |
 
 Tickerplant publish frequency 1000ms
 
 Monitor query frequency: 50ms
 
-|        Stat            |  DRAM         | Optane   | Comparison* |
-| :----------------------|--------------:| -----------:| ----------: |
-| Max Latency            |  0D00:00:01.054148932 | 0D00:00:01.037875019    | 0.984562  |
-| Bytes in Memory        |  171893717392    | 5765488            | 29814.25  |
-| Average Query Time     |  0D00:00:00.047581782 | 0D00:00:00.067816369    | 0.7016268 |
-| Queries per minute     |  1000            | 1000               | 1         |
+|        Stat            |  DRAM                 | Optane               | Comparison* |
+| :----------------------|----------------------:| --------------------:| -----------:|
+| Max Latency            |  0D00:00:01.054148932 | 0D00:00:01.037875019 | 0.984562    |
+| Bytes in Memory        |  171893717392         | 5765488              | 29814.25    |
+| Average Query Time     |  0D00:00:00.047581782 | 0D00:00:00.067816369 | 0.7016268   |
+| Queries per minute     |  1080                 | 600                  | 0.55        |
 
 Tickerplant publish frequency 50ms
 
 Monitor query frequency: 20ms
 
-|        Stat            |  DRAM         | Optane   | Comparison* |
-| :----------------------|--------------:| -----------:| ----------: |
-| Max Latency            |  0D00:01:17.585672136   | 0D00:14:29.525561499    | 0.08861793 |
-| Bytes in Memory        |  171888597648      | 5765488            | 29813     |
-| Average Query Time     |  0D00:00:00.050031983   | 0D00:00:00.070396229    | 0.7107196 |
-| Queries per minute     |  1000              | 700                | 0.7       |
+|        Stat            |  DRAM                 | Optane               | Comparison* |
+| :----------------------|----------------------:| --------------------:| ----------: |
+| Max Latency            |  0D00:01:17.585672136 | 0D00:14:29.525561499 | 0.08861793  |
+| Bytes in Memory        |  171888597648         | 5765488              | 29813       |
+| Average Query Time     |  0D00:00:00.050031983 | 0D00:00:00.070396229 | 0.7107196   |
+| Queries per minute     |  1000                 | 700                  | 0.7         |
 
 *Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = 200% faster or half memory used.
 
