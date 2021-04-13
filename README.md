@@ -147,7 +147,7 @@ Monitor query frequency: 20ms
 - As query frequency increases, Optane and DRAM both see latency increase but Optane struggles more.
 - By increasing the TP timer and allowing larger writes, the impact of slower read / writes in Optane can be reduced. (Note the 1 second max latency is due to data being published on a 1s timer).
 - The number of queries per minute supported in Optane was significantly less than DRAM in a number of situations so isn't a like for like replacement, but does offer great potential to augment DRAM capacity.
-- It's worth noting that Queries per minute are based off being run on a timer. They are not the limit of the number of queries that can be run. There is a theoretical limit to how many querires could be run to how many could run per minute for each timer freq. (Minute / query frequency)
+- It's worth noting that Queries per minute are based off being run on a timer. They are not the limit of the number of queries that can be run. There is a theoretical limit to how many queries could be run to how many could run per minute for each timer freq. (Minute / query frequency)
 
 The trade off in latency and max queries per minute is the compromise for a massive reduction in memory usage. This is expected though given the IO overhead of Optane vs DRAM.
 
@@ -359,7 +359,7 @@ Data arrives from a feed. Normally this would be a feed-handler publishing data 
 
 #### Tp<!-- omit in toc -->
 
-Standard kdb+ tp running in batch mode. 
+Standard kdb+ tp running in batch mode.
 
 #### AggEngine<!-- omit in toc -->
 
