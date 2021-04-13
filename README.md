@@ -10,7 +10,7 @@
 - Found that:
   - Optane is a viable solution to augment the realtime capacity of a kdb+ system
   - Optane allows better utilisation of existing hardware where DRAM was previously a limiting factor
-* 
+
 ## Table of Contents<!-- omit in toc -->
 
 - [Background](#background)
