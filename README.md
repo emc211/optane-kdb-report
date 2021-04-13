@@ -9,8 +9,8 @@
 - Wrote utility script to easily move in-memory data between DRAM and Optane memory
 - Found that:
   - Optane is a viable solution to augment the realtime capacity of a kdb+ system
-  - Optane allows better utiliation of existing hardware where DRAM was previously a limiting factor
-
+  - Optane allows better utilisation of existing hardware where DRAM was previously a limiting factor
+* 
 ## Table of Contents<!-- omit in toc -->
 
 - [Background](#background)
@@ -35,7 +35,7 @@ Traditionally the choke point of a market data platform has been the amount of D
 
 This blog:
 
-- Looks at wether Optane mounted in [AppDirect mode](https://code.kx.com/q/kb/optane/#app-direct-mode) can be used to help solve this problem
+- Looks at whether Optane mounted in [AppDirect mode](https://code.kx.com/q/kb/optane/#app-direct-mode) can be used to help solve this problem
 - Provides useful utilities to move data in and out of Optane memory
 - Documents the observed performance
 
@@ -50,7 +50,7 @@ Optane memory is accessible in kdb+ by use of the [-m command line option](https
 ```q
 // ex .mutil.colsToDotM[`trade;`price`size]
 .mutil.colsToDotM:{[t;cs] 
-    // enusre cs is list
+    // ensure cs is list
     cs,:();
     // pull out columns to move an assign in .m namespace
     (` sv `.m,t) set ?[t;();0b;cs!cs];
@@ -147,7 +147,7 @@ Monitor query frequency: 20ms
 - As query frequency increases, Optane and DRAM both see latency increase but Optane struggles more.
 - By increasing the TP timer and allowing larger writes, the impact of slower read / writes in Optane can be reduced. (Note the 1 second max latency is due to data being published on a 1s timer).
 - The number of queries per minute supported in Optane was significantly less than DRAM in a number of situations so isn't a like for like replacement, but does offer great potential to augment DRAM capacity.
-- It's worth noting that Queries per minute are based off being run on a timer. They are not the limit of the number of queries that can be run. There is a theoretical limit to how many quires could be run to how many could run per minute for each timer freq. (Minute / query frequency)
+- It's worth noting that Queries per minute are based off being run on a timer. They are not the limit of the number of queries that can be run. There is a theoretical limit to how many querires could be run to how many could run per minute for each timer freq. (Minute / query frequency)
 
 The trade off in latency and max queries per minute is the compromise for a massive reduction in memory usage. This is expected though given the IO overhead of Optane vs DRAM.
 
@@ -203,7 +203,7 @@ Ideas for future testing:
 
 ### Kdb+ 4.0 Release notes regarding Filesystem backed memory<!-- omit in toc -->
 
-Optane is support since [version 4.0](https://code.kx.com/q/releases/ChangesIn4.0/#optane-support).
+Optane is supported since [version 4.0](https://code.kx.com/q/releases/ChangesIn4.0/#optane-support).
 
 ```q
 2019.10.22
@@ -345,9 +345,9 @@ chmod 777 /mnt/pmem0
 chmod 777 /mnt/pmem1
 ```
 
-#### Numa settings<!-- omit in toc -->
+#### NUMA settings<!-- omit in toc -->
 
-The standard [recommendation](https://code.kx.com/q/kb/linux-production/) when using numa is to set --interleave=all ` numactl --interleave=all q ` but found slightly better performance in aligning the numa nodes with the persistent memory namespaces `numactl -N 0 -m 0  q -q -m /mnt/pmem0/` and `numactl -N 1 -m 1  q -q -m /mnt/pmem1/`
+The standard [recommendation](https://code.kx.com/q/kb/linux-production/) when using NUMA is to set --interleave=all ` numactl --interleave=all q ` but found slightly better performance in aligning the NUMA nodes with the persistent memory namespaces `numactl -N 0 -m 0  q -q -m /mnt/pmem0/` and `numactl -N 1 -m 1  q -q -m /mnt/pmem1/`
 
 ### Testing Framework Architecture<!-- omit in toc -->
 
