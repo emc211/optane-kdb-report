@@ -82,7 +82,7 @@ A tickerplant (tp) consumed this feed and on a timer distributed the messages to
 - Average Query Time (minutes:seconds) - Time taken to perform a typical query of some basic kdb operations. (Calculate VWAPS, ajs for each sym).
 - Queries per minute - number of queries mentioned above that could be run per minute in given stack.
   
-The above was considered a "stack". The testing consisted of running multiple stacks with their RDB hosted in either DRAM or Optane and varying the tickerplant publish / query request frequencies to determine the maximum number of the "typical kdb+ queries" the system could server and the max latency in each setup.
+These three process together were considered a "stack". The testing consisted of running multiple stacks with their RDB hosted in either DRAM or Optane and varying the tickerplant publish / query request frequencies to determine the maximum number of the "typical kdb+ queries" the system could server and the max latency in each setup.
 
 A more detailed description of the [architecture](#testing-framework-architecture) can be found in the appendix.
 
