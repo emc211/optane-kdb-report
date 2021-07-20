@@ -71,7 +71,7 @@ Using `.mutil.colsToDotM` rather than `.mutil.tblToDotM` allows users to move a 
 
 ## Testing Framework
 
-The framework was designed to mimic a typical kdb+ market data capture platform and then observe and record system latency. A command line flag would tell the framework if it should start its RDB in DRAM or Optane.  The capture section of the framework is largely base on the standard [tick architecture](https://github.com/KxSystems/kdb-tick)
+The framework was designed to mimic a typical kdb+ market data capture platform and then observe and record system latency. A command line flag would tell the framework if it should start its RDB in DRAM or Optane.  The capture section of the framework is largely base on the standard [tick architecture](https://github.com/KxSystems/kdb-tick).
 
 The framework simulates the volume and velocity of market data processed on March 9th 2020. It prestressed the RDB with 65 million records, and then sends 48,000 updates per second for the next 30 minutes, split between trades and quotes in a 1:10 ratio.
 
