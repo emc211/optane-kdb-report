@@ -45,7 +45,7 @@ This paper was produced in partnership with Intel, so focuses on Optane memory, 
 
 ## Kdb+ Utility Functions for Optane Memory
 
-Optane memory is accessible in kdb+ by use of the [-m command line option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and the [`.m` namespace](https://code.kx.com/q/ref/dotm/). To move data into Optane simply define it in the `.m` namespace. No other code changes are required. This can be accomplished by using the following two functions from the [mutil.q](../src/q/mutil.q) script.
+Optane memory is accessible in kdb+ by use of the [-m command line option](https://code.kx.com/q/basics/cmdline/#-m-memory-domain) and the [`.m` namespace](https://code.kx.com/q/ref/dotm/). To move data into Optane simply define it in the `.m` namespace. No other code changes are required. This can be accomplished by using the following two functions.
 
 ```q
 // ex .mutil.colsToDotM[`trade;`price`size]
