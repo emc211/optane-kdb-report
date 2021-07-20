@@ -52,7 +52,7 @@ Optane memory is accessible in kdb+ by use of the [-m command line option](https
 .mutil.colsToDotM:{[t;cs] 
     // ensure cs is list
     cs,:();
-    // pull out columns to move an assign in .m namespace
+    // pull out columns to move and assign to name in in .m
     (` sv `.m,t) set ?[t;();0b;cs!cs];
     // replace columns in table
     t set get[t],'.m[t];
@@ -77,17 +77,18 @@ The framework simulates the volume and velocity of market data processed on Marc
 
 A tickerplant (tp) consumed this feed and on a timer distributed the messages to an aggregation engine which aggregated stats to a minute and daily level before publishing them back to the tickerplant. The RDB consumes the raw and aggregated data. On a separate configurable timer, the monitor process queries the RDB and measures all of the below, considered to be a "typical kdb+ query":
 
-- Max trade / quote latency (time between the tick being generated in the feed process and being accessible via a query to the RDB)
-- Max aggregated trade / quote stats latency (as above - but also including the time for the aggregation engine to perform it's calculations and publish the results)
-- Number of records in each table
-- Time taken to get the prevailing quote information for every trade for a single ticker
-- Memory utilisation stats
-
+- Max Latency (minutes:seconds) - time between the tick being generated in the feed process and available in aggregated data in RDB.
+- Memory utilisation stats (MB) - number of megabytes of memory the process was using.
+- Average Query Time (minutes:seconds) - Time taken to perform a typical query of some basic kdb operations. (Calculate VWAPS, ajs for each sym).
+- Queries per minute - number of queries mentioned above that could be run per minute in given stack.
+  
 The above was considered a "stack". The testing consisted of running multiple stacks with their RDB hosted in either DRAM or Optane and varying the tickerplant publish / query request frequencies to determine the maximum number of the "typical kdb+ queries" the system could server and the max latency in each setup.
 
 A more detailed description of the [architecture](#testing-framework-architecture) can be found in the appendix.
 
 ## Results and Discussion
+
+The measurements recorded below were from the last minute of our 30min close period simulation after initially pre stressing rdbs on start up.
 
 ### Test Case 1
 
@@ -95,65 +96,57 @@ Run two DRAM RDBs and two Optane RDBs. Volume of data being published is constan
 
 #### Results
 
-Tickerplant publish frequency 50ms
-
-Monitor query frequency: 300ms
-
 |        Stat            |  DRAM         | Optane     | Comparison<sup>1</sup>|
 | :----------------------|--------------:| ----------:| -----------:|
 | Max Latency            |  00:00.0365   | 00:00.0599 | 0.6097      |
-| Memory Usage MB        |  171,893      | 5.766      | 29814       |
+| Memory Usage           |  171,893      | 5.766      | 29814       |
 | Average Query Time     |  00:00.0471   | 00:00.0678 | 0.6946      |
 | Queries per minute     |  200          | 200        | 1           |
 
-Tickerplant publish frequency 50ms
-
-Monitor query frequency: 50ms
+Figure 1. *Tickerplant publish period 50ms. Monitor query period: 300ms*
 
 |        Stat            |  DRAM       | Optane     | Comparison<sup>1</sup>|
 | :----------------------|------------:| ----------:| -----------: |
 | Max Latency            | 00:00.1252  | 04:45.2034 | 7.320e-06    |
-| Memory Usage MB        | 171,893     | 5.766      | 29814        |
+| Memory Usage           | 171,893     | 5.766      | 29814        |
 | Average Query Time     | 00:00.0506  | 00:00.0698 | 0.7254       |
 | Queries per minute     | 880         | 600        | 0.6818       |
 
-Tickerplant publish frequency 1000ms
-
-Monitor query frequency: 50ms
+Figure 2. *Tickerplant publish period 50ms. Monitor query period: 50ms*
 
 |        Stat            |  DRAM       | Optane     | Comparison<sup>1</sup>|
 | :----------------------|------------:| ----------:| -----------:|
 | Max Latency            |  00:01.0541 | 00:01.0379 | 0.9846      |
-| Memory Usage MB        |  171,893    | 5.766      | 29814       |
+| Memory Usage           |  171,893    | 5.766      | 29814       |
 | Average Query Time     |  00:00.0476 | 00:00.0678 | 0.7016      |
 | Queries per minute     |  1080       | 600        | 0.55        |
 
-Tickerplant publish frequency 50ms
-
-Monitor query frequency: 20ms
+Figure 3. *Tickerplant publish period 1000ms. Monitor query period: 50ms*
 
 |        Stat            |  DRAM       | Optane     |Comparison<sup>1</sup>|
 | :----------------------|------------:| ----------:| ----------: |
 | Max Latency            |  01:17.5857 | 14:29.5256 | 0.08862     |
-| Memory Usage MB        |  171,888    | 5.766      | 29813       |
+| Memory Usage           |  171,888    | 5.766      | 29813       |
 | Average Query Time     |  00:00.0500 | 00:00.0704 | 0.7107      |
 | Queries per minute     |  1000       | 700        | 0.7         |
+
+Figure 4. *Tickerplant publish period 50ms. Monitor query period: 20ms*
 
 <sup>1</sup>Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = twice as fast or half the memory used.
 
 #### Analysis
 
 - Max latency is as expected, consistently higher in the Optane RDBs. (1-14x more)
-- As query frequency increases, Optane and DRAM both see latency increase but Optane struggles more.
+- As seen in figure 2 when query frequency increases, Optane and DRAM both see latency increase but significantly more in Optane. This demonstrates that although the difference in query time may seem small whenever the number of queries increase it can have a dramatic impact. This is true of any system that will see increased queries not just for an RDB. But needs to be considered if trying to switch a very heavily queried process to use optane backed memory.
 - By increasing the TP timer and allowing larger writes, the impact of slower read / writes in Optane can be reduced. (Note the 1 second max latency is due to data being published on a 1s timer).
 - The number of queries per minute supported in Optane was significantly less than DRAM in a number of situations so isn't a like for like replacement, but does offer great potential to augment DRAM capacity.
-- It's worth noting that Queries per minute are based off being run on a timer. They are not the limit of the number of queries that can be run. There is a theoretical limit to how many queries could be run to how many could run per minute for each timer freq. (Minute / query frequency)
+- It's worth noting that Queries per minute are based off being run on a timer. They are not the limit of the number of queries that can be run. There is a theoretical limit to how many queries could be run to how many could run per minute for each timer period. (Minute / query period)
 
 The trade off in latency and max queries per minute is the compromise for a massive reduction in memory usage. This is expected though given the IO overhead of Optane vs DRAM.
 
 ### Test Case 2
 
-Comparing two DRAM RDBs versus ten Optane  RDBs, 1s TP publish frequency and query frequency of 50ms.
+Comparing two DRAM RDBs versus ten Optane  RDBs, 1s TP publish period and query period of 50ms.
 Again recording latency of systems but also the sum max number of queries achievable across all RDB instances to attempt to model performance achievable with a perfect load balancer.
 
 #### Results
@@ -164,6 +157,8 @@ Again recording latency of systems but also the sum max number of queries achiev
 | % Memory of DRAM used on server | 63.2989      | 2.25653        | 28.0514  |
 | Average Query Time              | 00:00.04672  | 00:00.0678     | 0.6889   |
 | Max queries per minute          | 2314         | 7735           | 3.4327   |
+
+Figure 5. *Comparison of 2 DRAM RDBs versus 10 Optane RDBs on same server*
 
 <sup>1</sup>Comparison is factor. Higher is better. Factor of 1 = same performance. Factor of 2 = twice as fast or half the memory used.
 
@@ -181,7 +176,7 @@ From this analysis, Optane is a viable option to help augment the DRAM capacity 
 
 A simple load balancer may result in inconsistent query times for users, however many kdb+ IPC frameworks now have the ability to add different queries to different priority queues depending on query / user characteristics. In these instances, routing high priority traffic to DRAM RDBs and less time critical queries to Optane RDBs would be a great way to use the additional capacity.
 
-It is worth noting that Optane performance wont scale linearly. The ten Optane RDBs were spread across two cards. From discussions with the team at Intel, they expect each card should support up to five concurrent reads or writes before IO contention becomes an issue. The testing which was carried out with NUMA / taskset settings configured to ensure each RDB was locked to the optimal cards and CPU. More details of which are available in the [appendix](#appendix).
+It is worth noting that Optane performance won't scale linearly. The appDirect memory was spread across two optane chips, one per CPU socket. And accessible to the application as two separate mounts. From discussions with the team at Intel, they expect each CPU socket should support up to five concurrent reads or writes before IO contention becomes an issue. The testing which was carried out was done so with NUMA settings configured to ensure each RDB was using the optimal pair of optane mount and CPU node. This is to ensure the rdb is not using a CPU to write/read data to/from an optane chip plugged into another CPU socket's slot.
 
 A great use of Optane could be moving less frequently used columns out of DRAM and into Optane using a util such as `.mutil.colsToDotM`. Many systems have a number of timestamps which are only ever used to forensically examine a production issue such as misaligned / late data. Many users drop these columns from the RDB insert and need to replay the TP log to access them during a production issue. Keeping them in Optane would allow instant access during given issues.
 
@@ -345,17 +340,15 @@ chmod 777 /mnt/pmem0
 chmod 777 /mnt/pmem1
 ```
 
-#### NUMA settings<!-- omit in toc -->
-
-The standard [recommendation](https://code.kx.com/q/kb/linux-production/) when using NUMA is to set --interleave=all ` numactl --interleave=all q ` but found slightly better performance in aligning the NUMA nodes with the persistent memory namespaces `numactl -N 0 -m 0  q -q -m /mnt/pmem0/` and `numactl -N 1 -m 1  q -q -m /mnt/pmem1/`
-
 ### Testing Framework Architecture<!-- omit in toc -->
 
-![fig - Architecture of kdb+ stack](figs/stack.png)
+![Architecture Diagram of kdb+ stack](figs/stack.png)
+
+Figure 6. *Architecture of kdb+ stack*
 
 #### Feed<!-- omit in toc -->
 
-Data arrives from a feed. Normally this would be a feed-handler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which during its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades. 
+Data arrives from a feed. Normally this would be a feed-handler publishing data from exchanges or vendors. For consistent testing we have simulated this feed from another q process. This process generates random data and publishes down stream. For the rate of data to send we looked and the largest day of market activity in 2020. which during its last half hour of trading before the close consisted of 80,000,000 quote msgs and 15,000,000 trades.
 
 #### Tp<!-- omit in toc -->
 
